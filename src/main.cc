@@ -246,8 +246,8 @@ std::string process_word(const std::string &word, const Options &options)
   return processed;
 }
 
-bool process_file(const fs::path &path, std::vector<std::string> &words,
-                 std::atomic<size_t> &total_words, const Options &options)
+[[nodiscard]] bool process_file(const fs::path &path, std::vector<std::string> &words,
+                                std::atomic<size_t> &total_words, const Options &options)
 {
   auto file = CompressedMemoryMappedFile::Create(path);
   if (!file)
