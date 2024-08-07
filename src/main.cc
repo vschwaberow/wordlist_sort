@@ -20,6 +20,7 @@
 #include <regex>
 #include <sstream>
 #include <unordered_map>
+#include <memory_resource>
 
 #include <CLI/CLI.hpp>
 
