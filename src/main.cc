@@ -302,7 +302,7 @@ std::string process_word(const std::string &word, const Options &options)
   return true;
 }
 
-bool ProcessMultipleFiles(const std::vector<fs::path> &paths, std::vector<std::string> &words, std::atomic<size_t> &total_words, const Options &options)
+bool process_multiple_files(const std::vector<fs::path> &paths, std::vector<std::string> &words, std::atomic<size_t> &total_words, const Options &options)
 {
   for (const auto &path : paths)
   {
@@ -432,7 +432,7 @@ int main(int argc, char *argv[])
   std::atomic<size_t> total_words(0);
   std::vector<std::string> words;
 
-  if (!ProcessMultipleFiles(input_paths, words, total_words, options))
+  if (!process_multiple_files(input_paths, words, total_words, options))
   {
     return 1;
   }
