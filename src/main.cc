@@ -378,7 +378,7 @@ int main(int argc, char *argv[])
   CLI::App app{PROGRAM_NAME};
   app.set_version_flag("--version", std::string(PROGRAM_VERSION) + " (" + BUILD_DATE + " " + BUILD_TIME + " " + BUILD_PLATFORM + ")");
 
-  Options options;
+  Options options{};
   fs::path output_path;
   std::vector<fs::path> input_paths;
 
