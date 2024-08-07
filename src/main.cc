@@ -246,7 +246,7 @@ std::string process_word(const std::string &word, const Options &options)
   return processed;
 }
 
-bool ProcessFile(const fs::path &path, std::vector<std::string> &words,
+bool process_file(const fs::path &path, std::vector<std::string> &words,
                  std::atomic<size_t> &total_words, const Options &options)
 {
   auto file = CompressedMemoryMappedFile::Create(path);
@@ -306,7 +306,7 @@ bool ProcessMultipleFiles(const std::vector<fs::path> &paths, std::vector<std::s
 {
   for (const auto &path : paths)
   {
-    if (!ProcessFile(path, words, total_words, options))
+    if (!process_file(path, words, total_words, options))
     {
       return false;
     }
