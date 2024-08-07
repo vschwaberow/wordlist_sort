@@ -24,14 +24,14 @@
 
 #include <CLI/CLI.hpp>
 
-constexpr const char *PROGRAM_NAME = PROJECT_NAME;
-constexpr const char *PROGRAM_VERSION = PROJECT_VERSION;
-constexpr const char *PROGRAM_AUTHOR = PROJECT_AUTHOR;
-constexpr const char *PROGRAM_COPYRIGHT = PROJECT_COPYRIGHT;
-constexpr const char *BUILD_DATE = __DATE__;
-constexpr const char *BUILD_TIME = __TIME__;
-constexpr const char *BUILD_PLATFORM = BUILD_PLATFORM_INFO;
-constexpr const char *COMPILER_INFO = COMPILER_INFO_STRING;
+inline constexpr const char *PROGRAM_NAME = PROJECT_NAME;
+inline constexpr const char *PROGRAM_VERSION = PROJECT_VERSION;
+inline constexpr const char *PROGRAM_AUTHOR = PROJECT_AUTHOR;
+inline constexpr const char *PROGRAM_COPYRIGHT = PROJECT_COPYRIGHT;
+inline constexpr const char *BUILD_DATE = __DATE__;
+inline constexpr const char *BUILD_TIME = __TIME__;
+inline constexpr const char *BUILD_PLATFORM = BUILD_PLATFORM_INFO;
+inline constexpr const char *COMPILER_INFO = COMPILER_INFO_STRING;
 
 namespace fs = std::filesystem;
 
