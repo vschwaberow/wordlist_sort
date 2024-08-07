@@ -8,7 +8,6 @@ class WordSorterConan(ConanFile):
     generators = "CMakeDeps", "CMakeToolchain"
 
     def requirements(self):
-        self.requires("lz4/1.9.4")
         self.requires("cli11/2.4.2")
 
     def build_requirements(self):
