@@ -163,7 +163,7 @@ private:
   size_t size_ = 0;
 };
 
-std::string processWord(const std::string &word, const Options &options)
+std::string process_word(const std::string &word, const Options &options)
 {
   std::string processed = word;
 
@@ -270,7 +270,7 @@ bool ProcessFile(const fs::path &path, std::vector<std::string> &words,
       std::string subword;
       while (iss >> subword)
       {
-        std::string processed = processWord(subword, options);
+        std::string processed = process_word(subword, options);
         if (!processed.empty() &&
             (options.minlen == 0 || processed.length() >= static_cast<size_t>(options.minlen)) &&
             (options.maxlen == 0 || processed.length() <= static_cast<size_t>(options.maxlen)))
@@ -282,7 +282,7 @@ bool ProcessFile(const fs::path &path, std::vector<std::string> &words,
     }
     else
     {
-      std::string processed = processWord(std::string(line_view), options);
+      std::string processed = process_word(std::string(line_view), options);
       if (!processed.empty() &&
           (options.minlen == 0 || processed.length() >= static_cast<size_t>(options.minlen)) &&
           (options.maxlen == 0 || processed.length() <= static_cast<size_t>(options.maxlen)))
