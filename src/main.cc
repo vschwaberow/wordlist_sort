@@ -345,7 +345,7 @@ private:
   std::ofstream file_;
 };
 
-bool WriteResultToFile(const std::vector<std::string> &words, const fs::path &output_path)
+bool write_result_to_file(const std::vector<std::string> &words, const fs::path &output_path)
 {
   auto output = OutputFile::Create(output_path);
   if (!output)
@@ -448,7 +448,7 @@ int main(int argc, char *argv[])
     words.erase(last, words.end());
   }
 
-  if (!WriteResultToFile(words, output_path))
+  if (!write_result_to_file(words, output_path))
   {
     std::cerr << "Error: Failed to write output file" << std::endl;
     return 1;
