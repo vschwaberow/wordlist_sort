@@ -261,9 +261,21 @@ std::string process_word(const std::string &word, const Options &options)
     auto line_end = file_content.find('\n');
     std::string_view line_view = file_content.substr(0, line_end);
 
+    std::string line_str(line_view);
+    if (options.dewebify)
+    {
+      line_str = strip_html_tags(line_str);
+      if (options.noutf8)
+      {
+        line_str.erase(std::remove_if(line_str.begin(), line_str.end(),
+                                      [](unsigned char c)
+                                      { return c <= 127; }),
+                       line_str.end());
+      }
+    }
+
     if (options.wordify)
     {
-      std::string line_str(line_view);
       std::istringstream iss{line_str};
       std::string subword;
       while (iss >> subword)
@@ -280,7 +292,7 @@ std::string process_word(const std::string &word, const Options &options)
     }
     else
     {
-      std::string processed = process_word(std::string(line_view), options);
+      std::string processed = process_word(line_str, options);
       if (!processed.empty() &&
           (options.minlen == 0 || processed.length() >= static_cast<size_t>(options.minlen)) &&
           (options.maxlen == 0 || processed.length() <= static_cast<size_t>(options.maxlen)))
