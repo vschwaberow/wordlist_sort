@@ -108,4 +108,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Acknowledgments
 
 - This project uses [CMake](https://cmake.org/) for build configuration.
-- [Conan](https://conan.io/) is used for package management (optional).
