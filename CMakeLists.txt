@@ -26,7 +26,6 @@ else()
     set(COMPILER_INFO_STRING "Unknown compiler")
 endif()
 
-# Pass these to the compiler as definitions
 add_definitions(
     -DPROJECT_NAME="${PROJECT_NAME}"
     -DPROJECT_VERSION="${PROJECT_VERSION}"
@@ -39,11 +38,37 @@ add_definitions(
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(lz4 REQUIRED)
-find_package(CLI11 REQUIRED)
+set(CPM_DOWNLOAD_VERSION 0.40.2)
+
+if(CPM_SOURCE_CACHE)
+    set(CPM_DOWNLOAD_LOCATION "${CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
+elseif(DEFINED ENV{CPM_SOURCE_CACHE})
+    set(CPM_DOWNLOAD_LOCATION "$ENV{CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
+else()
+    set(CPM_DOWNLOAD_LOCATION "${CMAKE_BINARY_DIR}/cmake/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
+endif()
+
+if(NOT(EXISTS ${CPM_DOWNLOAD_LOCATION}))
+    message(STATUS "Downloading CPM.cmake to ${CPM_DOWNLOAD_LOCATION}")
+    file(DOWNLOAD
+        https://github.com/cpm-cmake/CPM.cmake/releases/download/v${CPM_DOWNLOAD_VERSION}/CPM.cmake
+        ${CPM_DOWNLOAD_LOCATION}
+    )
+endif()
+
+include(${CPM_DOWNLOAD_LOCATION})
+
+CPMAddPackage(
+    NAME CLI11
+    GITHUB_REPOSITORY CLIUtils/CLI11
+    VERSION 2.3.2
+    OPTIONS
+    "CLI11_BUILD_EXAMPLES OFF"
+    "CLI11_BUILD_TESTS OFF"
+)
 
 add_executable(word_sorter src/main.cc)
 
-target_link_libraries(word_sorter PRIVATE lz4::lz4 CLI11::CLI11)
+target_link_libraries(word_sorter PRIVATE CLI11::CLI11)
 
 target_compile_options(word_sorter PRIVATE -O3 -march=native)

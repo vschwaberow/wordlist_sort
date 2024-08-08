@@ -14,24 +14,24 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <sys/mman.h>
 #include <unistd.h>
 #include <unordered_set>
 #include <vector>
 #include <regex>
 #include <sstream>
 #include <unordered_map>
+#include <memory_resource>
 
 #include <CLI/CLI.hpp>
 
-constexpr const char *PROGRAM_NAME = PROJECT_NAME;
-constexpr const char *PROGRAM_VERSION = PROJECT_VERSION;
-constexpr const char *PROGRAM_AUTHOR = PROJECT_AUTHOR;
-constexpr const char *PROGRAM_COPYRIGHT = PROJECT_COPYRIGHT;
-constexpr const char *BUILD_DATE = __DATE__;
-constexpr const char *BUILD_TIME = __TIME__;
-constexpr const char *BUILD_PLATFORM = BUILD_PLATFORM_INFO;
-constexpr const char *COMPILER_INFO = COMPILER_INFO_STRING;
+inline constexpr const char *PROGRAM_NAME = PROJECT_NAME;
+inline constexpr const char *PROGRAM_VERSION = PROJECT_VERSION;
+inline constexpr const char *PROGRAM_AUTHOR = PROJECT_AUTHOR;
+inline constexpr const char *PROGRAM_COPYRIGHT = PROJECT_COPYRIGHT;
+inline constexpr const char *BUILD_DATE = __DATE__;
+inline constexpr const char *BUILD_TIME = __TIME__;
+inline constexpr const char *BUILD_PLATFORM = BUILD_PLATFORM_INFO;
+inline constexpr const char *COMPILER_INFO = COMPILER_INFO_STRING;
 
 namespace fs = std::filesystem;
 
@@ -91,31 +91,41 @@ private:
 class MemoryMapping
 {
 public:
-  static std::unique_ptr<MemoryMapping> Create(int fd, size_t size, int prot, int flags)
+  static std::unique_ptr<MemoryMapping> Create(const fs::path &path)
   {
-    void *data = mmap(nullptr, size, prot, flags, fd, 0);
-    if (data == MAP_FAILED)
+    try
+    {
+      return std::unique_ptr<MemoryMapping>(new MemoryMapping(path));
+    }
+    catch (const std::exception &)
     {
       return nullptr;
     }
-    return std::unique_ptr<MemoryMapping>(new MemoryMapping(data, size));
   }
 
-  ~MemoryMapping()
+  const char *data() const { return file_contents_.data(); }
+  std::size_t size() const { return file_contents_.size(); }
+
+private:
+  explicit MemoryMapping(const fs::path &path)
   {
-    if (data_ != MAP_FAILED)
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file)
     {
-      munmap(data_, size_);
+      throw std::runtime_error("Unable to open file");
+    }
+
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    file_contents_.resize(static_cast<size_t>(size));
+    if (!file.read(file_contents_.data(), size))
+    {
+      throw std::runtime_error("Unable to read file");
     }
   }
 
-  void *get() const { return data_; }
-  size_t get_size() const { return size_; }
-
-private:
-  MemoryMapping(void *data, size_t size) : data_(data), size_(size) {}
-  void *data_;
-  size_t size_;
+  std::vector<char> file_contents_;
 };
 
 class CompressedMemoryMappedFile
@@ -123,7 +133,7 @@ class CompressedMemoryMappedFile
 public:
   static std::unique_ptr<CompressedMemoryMappedFile> Create(const fs::path &path)
   {
-    auto file = std::unique_ptr<CompressedMemoryMappedFile>(new CompressedMemoryMappedFile());
+    auto file = std::make_unique<CompressedMemoryMappedFile>();
     if (!file->Initialize(path))
     {
       return nullptr;
@@ -131,41 +141,53 @@ public:
     return file;
   }
 
-  const char *data() const { return data_; }
-  size_t size() const { return size_; }
+  const char *data() const { return mapping_ ? mapping_->data() : nullptr; }
+  size_t size() const { return mapping_ ? mapping_->size() : 0; }
+
+  CompressedMemoryMappedFile() = default; // Make constructor public
 
 private:
-  CompressedMemoryMappedFile() = default;
-
   bool Initialize(const fs::path &path)
   {
-    fd_ = FileDescriptor::Create(path.c_str(), O_RDONLY);
-    if (!fd_)
-    {
-      return false;
-    }
-
-    size_t file_size = fs::file_size(path);
-    mapping_ = MemoryMapping::Create(fd_->get(), file_size, PROT_READ, MAP_PRIVATE);
-    if (!mapping_)
-    {
-      return false;
-    }
-
-    data_ = static_cast<const char *>(mapping_->get());
-    size_ = mapping_->get_size();
-    return true;
+    mapping_ = MemoryMapping::Create(path);
+    return mapping_ != nullptr;
   }
 
-  std::unique_ptr<FileDescriptor> fd_;
   std::unique_ptr<MemoryMapping> mapping_;
-  const char *data_ = nullptr;
-  size_t size_ = 0;
 };
 
-std::string processWord(const std::string &word, const Options &options)
+std::string strip_html_tags(const std::string &html)
+{
+  std::string result;
+  bool in_tag = false;
+
+  for (char c : html)
+  {
+    if (c == '<')
+    {
+      in_tag = true;
+    }
+    else if (c == '>')
+    {
+      in_tag = false;
+    }
+    else if (!in_tag)
+    {
+      result += c;
+    }
+  }
+
+  return result;
+}
+
+std::string process_word(const std::string &word, const Options &options)
 {
   std::string processed = word;
+
+  if (options.dewebify)
+  {
+    processed = strip_html_tags(processed);
+  }
 
   if (options.lower)
   {
@@ -246,8 +268,8 @@ std::string processWord(const std::string &word, const Options &options)
   return processed;
 }
 
-bool ProcessFile(const fs::path &path, std::vector<std::string> &words,
-                 std::atomic<size_t> &total_words, const Options &options)
+[[nodiscard]] bool process_file(const fs::path &path, std::vector<std::string> &words,
+                                std::atomic<size_t> &total_words, const Options &options)
 {
   auto file = CompressedMemoryMappedFile::Create(path);
   if (!file)
@@ -263,14 +285,26 @@ bool ProcessFile(const fs::path &path, std::vector<std::string> &words,
     auto line_end = file_content.find('\n');
     std::string_view line_view = file_content.substr(0, line_end);
 
+    std::string line_str(line_view);
+    if (options.dewebify)
+    {
+      line_str = strip_html_tags(line_str);
+      if (options.noutf8)
+      {
+        line_str.erase(std::remove_if(line_str.begin(), line_str.end(),
+                                      [](unsigned char c)
+                                      { return c <= 127; }),
+                       line_str.end());
+      }
+    }
+
     if (options.wordify)
     {
-      std::string line_str(line_view);
       std::istringstream iss{line_str};
       std::string subword;
       while (iss >> subword)
       {
-        std::string processed = processWord(subword, options);
+        std::string processed = process_word(subword, options);
         if (!processed.empty() &&
             (options.minlen == 0 || processed.length() >= static_cast<size_t>(options.minlen)) &&
             (options.maxlen == 0 || processed.length() <= static_cast<size_t>(options.maxlen)))
@@ -282,7 +316,7 @@ bool ProcessFile(const fs::path &path, std::vector<std::string> &words,
     }
     else
     {
-      std::string processed = processWord(std::string(line_view), options);
+      std::string processed = process_word(line_str, options);
       if (!processed.empty() &&
           (options.minlen == 0 || processed.length() >= static_cast<size_t>(options.minlen)) &&
           (options.maxlen == 0 || processed.length() <= static_cast<size_t>(options.maxlen)))
@@ -302,11 +336,11 @@ bool ProcessFile(const fs::path &path, std::vector<std::string> &words,
   return true;
 }
 
-bool ProcessMultipleFiles(const std::vector<fs::path> &paths, std::vector<std::string> &words, std::atomic<size_t> &total_words, const Options &options)
+bool process_multiple_files(const std::vector<fs::path> &paths, std::vector<std::string> &words, std::atomic<size_t> &total_words, const Options &options)
 {
   for (const auto &path : paths)
   {
-    if (!ProcessFile(path, words, total_words, options))
+    if (!process_file(path, words, total_words, options))
     {
       return false;
     }
@@ -345,7 +379,7 @@ private:
   std::ofstream file_;
 };
 
-bool WriteResultToFile(const std::vector<std::string> &words, const fs::path &output_path)
+bool write_result_to_file(const std::vector<std::string> &words, const fs::path &output_path)
 {
   auto output = OutputFile::Create(output_path);
   if (!output)
@@ -378,7 +412,7 @@ int main(int argc, char *argv[])
   CLI::App app{PROGRAM_NAME};
   app.set_version_flag("--version", std::string(PROGRAM_VERSION) + " (" + BUILD_DATE + " " + BUILD_TIME + " " + BUILD_PLATFORM + ")");
 
-  Options options;
+  Options options{};
   fs::path output_path;
   std::vector<fs::path> input_paths;
 
@@ -432,7 +466,7 @@ int main(int argc, char *argv[])
   std::atomic<size_t> total_words(0);
   std::vector<std::string> words;
 
-  if (!ProcessMultipleFiles(input_paths, words, total_words, options))
+  if (!process_multiple_files(input_paths, words, total_words, options))
   {
     return 1;
   }
@@ -448,7 +482,7 @@ int main(int argc, char *argv[])
     words.erase(last, words.end());
   }
 
-  if (!WriteResultToFile(words, output_path))
+  if (!write_result_to_file(words, output_path))
   {
     std::cerr << "Error: Failed to write output file" << std::endl;
     return 1;
