@@ -17,7 +17,6 @@ wordlist_sort is a high-performance tool designed to process and sort large word
 
 - C++17 compatible compiler
 - CMake (version 3.12 or higher)
-- Conan package manager (optional, for managing dependencies)
 
 ## Building
 
@@ -26,15 +25,8 @@ wordlist_sort is a high-performance tool designed to process and sort large word
 git clone https://github.com/username/wordlist_sort.git
 cd wordlist_sort
 ```
-2. If using Conan (recommended):
-```bash
-mkdir build && cd build
-conan install ..
-cmake ..
-cmake --build .
-```
 
-3. If not using Conan:
+2. Compile the project using CMake:
 ```bash
 mkdir build && cd build
 cmake ..
