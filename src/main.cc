@@ -17,7 +17,6 @@
 #include <unistd.h>
 #include <unordered_set>
 #include <vector>
-#include <regex>
 #include <sstream>
 #include <unordered_map>
 #include <memory_resource>
@@ -180,6 +179,75 @@ std::string strip_html_tags(const std::string &html)
   return result;
 }
 
+bool is_digit(char c)
+{
+  return c >= '0' && c <= '9';
+}
+
+bool is_alpha(char c)
+{
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+bool is_alnum(char c)
+{
+  return is_alpha(c) || is_digit(c);
+}
+
+std::string trim_digits(const std::string &str)
+{
+  size_t start = 0;
+  size_t end = str.length();
+
+  while (start < end && is_digit(str[start]))
+  {
+    ++start;
+  }
+
+  while (end > start && is_digit(str[end - 1]))
+  {
+    --end;
+  }
+
+  return str.substr(start, end - start);
+}
+
+std::string trim_special(const std::string &str)
+{
+  size_t start = 0;
+  size_t end = str.length();
+
+  while (start < end && !is_alnum(str[start]))
+  {
+    ++start;
+  }
+
+  while (end > start && !is_alnum(str[end - 1]))
+  {
+    --end;
+  }
+
+  return str.substr(start, end - start);
+}
+
+bool is_valid_email(const std::string &str)
+{
+  size_t at_pos = str.find('@');
+  if (at_pos == std::string::npos || at_pos == 0 || at_pos == str.length() - 1)
+  {
+    return false;
+  }
+
+  size_t dot_pos = str.find('.', at_pos);
+  return dot_pos != std::string::npos && dot_pos > at_pos + 1 && dot_pos < str.length() - 1;
+}
+
+std::pair<std::string, std::string> split_email(const std::string &email)
+{
+  size_t at_pos = email.find('@');
+  return {email.substr(0, at_pos), email.substr(at_pos + 1)};
+}
+
 std::string process_word(const std::string &word, const Options &options)
 {
   std::string processed = word;
@@ -198,17 +266,25 @@ std::string process_word(const std::string &word, const Options &options)
 
   if (options.digit_trim)
   {
-    processed = std::regex_replace(processed, std::regex("^\\d+|\\d+$"), "");
+    processed = trim_digits(processed);
   }
 
   if (options.special_trim)
   {
-    processed = std::regex_replace(processed, std::regex("^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$"), "");
+    processed = trim_special(processed);
   }
 
   if (options.detab)
   {
-    processed.erase(0, processed.find_first_not_of(" \t"));
+    size_t first_non_space = processed.find_first_not_of(" \t");
+    if (first_non_space != std::string::npos)
+    {
+      processed = processed.substr(first_non_space);
+    }
+    else
+    {
+      processed.clear();
+    }
   }
 
   if (options.maxtrim > 0 && processed.length() > static_cast<size_t>(options.maxtrim))
@@ -229,14 +305,26 @@ std::string process_word(const std::string &word, const Options &options)
     processed = deduped;
   }
 
-  if (options.no_numbers && std::all_of(processed.begin(), processed.end(), ::isdigit))
+  if (options.no_numbers && std::all_of(processed.begin(), processed.end(), is_digit))
   {
     return "";
   }
 
-  if (options.hash_remove && std::regex_match(processed, std::regex("^[a-fA-F0-9]{32,}$")))
+  if (options.hash_remove && processed.length() >= 32)
   {
-    return "";
+    bool is_hash = true;
+    for (char c : processed)
+    {
+      if (!is_digit(c) && (c < 'a' || c > 'f') && (c < 'A' || c > 'F'))
+      {
+        is_hash = false;
+        break;
+      }
+    }
+    if (is_hash)
+    {
+      return "";
+    }
   }
 
   if (options.dup_sense > 0)
@@ -255,14 +343,10 @@ std::string process_word(const std::string &word, const Options &options)
     }
   }
 
-  if (options.email_sort)
+  if (options.email_sort && is_valid_email(processed))
   {
-    std::regex email_regex(R"(([^@\s]+)@([^@\s]+\.[^@\s]+))");
-    std::smatch match;
-    if (std::regex_match(processed, match, email_regex))
-    {
-      return match[1].str() + " " + match[2].str();
-    }
+    auto [username, domain] = split_email(processed);
+    return username + " " + domain;
   }
 
   return processed;
