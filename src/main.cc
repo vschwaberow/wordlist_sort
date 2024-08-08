@@ -160,6 +160,11 @@ std::string process_word(const std::string &word, const Options &options)
 {
   std::string processed = word;
 
+  if (options.dewebify)
+  {
+    processed = strip_html_tags(processed);
+  }
+
   if (options.lower)
   {
     std::transform(processed.begin(), processed.end(), processed.begin(),
@@ -357,6 +362,30 @@ bool write_result_to_file(const std::vector<std::string> &words, const fs::path 
   }
 
   return true;
+}
+
+std::string strip_html_tags(const std::string &html)
+{
+  std::string result;
+  bool in_tag = false;
+
+  for (char c : html)
+  {
+    if (c == '<')
+    {
+      in_tag = true;
+    }
+    else if (c == '>')
+    {
+      in_tag = false;
+    }
+    else if (!in_tag)
+    {
+      result += c;
+    }
+  }
+
+  return result;
 }
 
 void print_header()
