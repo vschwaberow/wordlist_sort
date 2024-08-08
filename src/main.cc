@@ -91,31 +91,41 @@ private:
 class MemoryMapping
 {
 public:
-  static std::unique_ptr<MemoryMapping> Create(int fd, size_t size, int prot, int flags)
+  static std::unique_ptr<MemoryMapping> Create(const fs::path &path)
   {
-    void *data = mmap(nullptr, size, prot, flags, fd, 0);
-    if (data == MAP_FAILED)
+    try
+    {
+      return std::unique_ptr<MemoryMapping>(new MemoryMapping(path));
+    }
+    catch (const std::exception &)
     {
       return nullptr;
     }
-    return std::unique_ptr<MemoryMapping>(new MemoryMapping(data, size));
   }
 
-  ~MemoryMapping()
+  const char *data() const { return file_contents_.data(); }
+  std::size_t size() const { return file_contents_.size(); }
+
+private:
+  explicit MemoryMapping(const fs::path &path)
   {
-    if (data_ != MAP_FAILED)
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file)
     {
-      munmap(data_, size_);
+      throw std::runtime_error("Unable to open file");
+    }
+
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    file_contents_.resize(static_cast<size_t>(size));
+    if (!file.read(file_contents_.data(), size))
+    {
+      throw std::runtime_error("Unable to read file");
     }
   }
 
-  void *get() const { return data_; }
-  size_t get_size() const { return size_; }
-
-private:
-  MemoryMapping(void *data, size_t size) : data_(data), size_(size) {}
-  void *data_;
-  size_t size_;
+  std::vector<char> file_contents_;
 };
 
 class CompressedMemoryMappedFile
@@ -123,7 +133,7 @@ class CompressedMemoryMappedFile
 public:
   static std::unique_ptr<CompressedMemoryMappedFile> Create(const fs::path &path)
   {
-    auto file = std::unique_ptr<CompressedMemoryMappedFile>(new CompressedMemoryMappedFile());
+    auto file = std::make_unique<CompressedMemoryMappedFile>();
     if (!file->Initialize(path))
     {
       return nullptr;
@@ -131,36 +141,19 @@ public:
     return file;
   }
 
-  const char *data() const { return data_; }
-  size_t size() const { return size_; }
+  const char *data() const { return mapping_ ? mapping_->data() : nullptr; }
+  size_t size() const { return mapping_ ? mapping_->size() : 0; }
+
+  CompressedMemoryMappedFile() = default; // Make constructor public
 
 private:
-  CompressedMemoryMappedFile() = default;
-
   bool Initialize(const fs::path &path)
   {
-    fd_ = FileDescriptor::Create(path.c_str(), O_RDONLY);
-    if (!fd_)
-    {
-      return false;
-    }
-
-    size_t file_size = fs::file_size(path);
-    mapping_ = MemoryMapping::Create(fd_->get(), file_size, PROT_READ, MAP_PRIVATE);
-    if (!mapping_)
-    {
-      return false;
-    }
-
-    data_ = static_cast<const char *>(mapping_->get());
-    size_ = mapping_->get_size();
-    return true;
+    mapping_ = MemoryMapping::Create(path);
+    return mapping_ != nullptr;
   }
 
-  std::unique_ptr<FileDescriptor> fd_;
   std::unique_ptr<MemoryMapping> mapping_;
-  const char *data_ = nullptr;
-  size_t size_ = 0;
 };
 
 std::string process_word(const std::string &word, const Options &options)
