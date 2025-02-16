@@ -7,19 +7,21 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <ctime>
+#include <cctype>
 #include <cstring>
-#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <string>
-#include <unistd.h>
-#include <unordered_set>
-#include <vector>
+#include <iterator>
+#include <ranges>
 #include <sstream>
+#include <string>
+#include <string_view>
 #include <unordered_map>
-#include <memory_resource>
+#include <vector>
+#include <memory>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <CLI/CLI.hpp>
 
@@ -72,7 +74,7 @@ public:
     return std::unique_ptr<FileDescriptor>(new FileDescriptor(file_descriptor));
   }
 
-  ~FileDescriptor()
+  ~FileDescriptor() noexcept
   {
     if (fd_ != -1)
     {
@@ -83,7 +85,7 @@ public:
   int get() const { return fd_; }
 
 private:
-  explicit FileDescriptor(int fd) : fd_(fd) {}
+  explicit FileDescriptor(int fd) : fd_{fd} {}
   int fd_;
 };
 
@@ -116,7 +118,6 @@ private:
 
     std::streamsize size = file.tellg();
     file.seekg(0, std::ios::beg);
-
     file_contents_.resize(static_cast<size_t>(size));
     if (!file.read(file_contents_.data(), size))
     {
@@ -133,7 +134,7 @@ public:
   static std::unique_ptr<CompressedMemoryMappedFile> Create(const fs::path &path)
   {
     auto file = std::make_unique<CompressedMemoryMappedFile>();
-    if (!file->Initialize(path))
+    if (!file->initialize(path))
     {
       return nullptr;
     }
@@ -141,12 +142,12 @@ public:
   }
 
   const char *data() const { return mapping_ ? mapping_->data() : nullptr; }
-  size_t size() const { return mapping_ ? mapping_->size() : 0; }
+  std::size_t size() const { return mapping_ ? mapping_->size() : 0; }
 
-  CompressedMemoryMappedFile() = default; // Make constructor public
+  CompressedMemoryMappedFile() = default;
 
 private:
-  bool Initialize(const fs::path &path)
+  bool initialize(const fs::path &path)
   {
     mapping_ = MemoryMapping::Create(path);
     return mapping_ != nullptr;
@@ -158,8 +159,8 @@ private:
 std::string strip_html_tags(const std::string &html)
 {
   std::string result;
+  result.reserve(html.size());
   bool in_tag = false;
-
   for (char c : html)
   {
     if (c == '<')
@@ -172,79 +173,53 @@ std::string strip_html_tags(const std::string &html)
     }
     else if (!in_tag)
     {
-      result += c;
+      result.push_back(c);
     }
   }
-
   return result;
 }
 
-bool is_digit(char c)
-{
-  return c >= '0' && c <= '9';
-}
+constexpr bool is_digit(char c) noexcept { return c >= '0' && c <= '9'; }
 
-bool is_alpha(char c)
+constexpr bool is_alpha(char c) noexcept
 {
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
-bool is_alnum(char c)
-{
-  return is_alpha(c) || is_digit(c);
-}
+constexpr bool is_alnum(char c) noexcept { return is_alpha(c) || is_digit(c); }
 
 std::string trim_digits(const std::string &str)
 {
-  size_t start = 0;
-  size_t end = str.length();
-
-  while (start < end && is_digit(str[start]))
-  {
-    ++start;
-  }
-
-  while (end > start && is_digit(str[end - 1]))
-  {
-    --end;
-  }
-
-  return str.substr(start, end - start);
+  const auto not_digit = [](char ch) noexcept
+  { return !is_digit(ch); };
+  auto start_it = std::find_if(str.begin(), str.end(), not_digit);
+  auto end_it = std::find_if(str.rbegin(), str.rend(), not_digit).base();
+  return (start_it < end_it ? std::string(start_it, end_it) : std::string{});
 }
 
 std::string trim_special(const std::string &str)
 {
-  size_t start = 0;
-  size_t end = str.length();
-
-  while (start < end && !is_alnum(str[start]))
-  {
-    ++start;
-  }
-
-  while (end > start && !is_alnum(str[end - 1]))
-  {
-    --end;
-  }
-
-  return str.substr(start, end - start);
+  const auto is_alnum_fn = [](char ch) noexcept
+  { return is_alnum(ch); };
+  auto start_it = std::find_if(str.begin(), str.end(), is_alnum_fn);
+  auto end_it = std::find_if(str.rbegin(), str.rend(), is_alnum_fn).base();
+  return (start_it < end_it ? std::string(start_it, end_it) : std::string{});
 }
 
 bool is_valid_email(const std::string &str)
 {
-  size_t at_pos = str.find('@');
+  const auto at_pos = str.find('@');
   if (at_pos == std::string::npos || at_pos == 0 || at_pos == str.length() - 1)
   {
     return false;
   }
-
-  size_t dot_pos = str.find('.', at_pos);
-  return dot_pos != std::string::npos && dot_pos > at_pos + 1 && dot_pos < str.length() - 1;
+  const auto dot_pos = str.find('.', at_pos + 1);
+  return (dot_pos != std::string::npos && dot_pos > at_pos + 1 && dot_pos < str.length() - 1);
 }
 
 std::pair<std::string, std::string> split_email(const std::string &email)
 {
-  size_t at_pos = email.find('@');
+  const auto at_pos = email.find('@');
   return {email.substr(0, at_pos), email.substr(at_pos + 1)};
 }
 
@@ -261,7 +236,7 @@ std::string process_word(const std::string &word, const Options &options)
   {
     std::transform(processed.begin(), processed.end(), processed.begin(),
                    [](unsigned char c)
-                   { return std::tolower(c); });
+                   { return static_cast<char>(std::tolower(c)); });
   }
 
   if (options.digit_trim)
@@ -276,33 +251,19 @@ std::string process_word(const std::string &word, const Options &options)
 
   if (options.detab)
   {
-    size_t first_non_space = processed.find_first_not_of(" \t");
-    if (first_non_space != std::string::npos)
-    {
-      processed = processed.substr(first_non_space);
-    }
-    else
-    {
-      processed.clear();
-    }
+    const auto first_non_space = processed.find_first_not_of(" \t");
+    processed = (first_non_space != std::string::npos) ? processed.substr(first_non_space)
+                                                       : std::string{};
   }
 
-  if (options.maxtrim > 0 && processed.length() > static_cast<size_t>(options.maxtrim))
+  if (options.maxtrim > 0 && processed.size() > static_cast<std::size_t>(options.maxtrim))
   {
-    processed = processed.substr(0, options.maxtrim);
+    processed.resize(options.maxtrim);
   }
 
   if (options.dup_remove)
   {
-    std::string deduped;
-    for (char c : processed)
-    {
-      if (deduped.empty() || c != deduped.back())
-      {
-        deduped += c;
-      }
-    }
-    processed = deduped;
+    processed.erase(std::unique(processed.begin(), processed.end()), processed.end());
   }
 
   if (options.no_numbers && std::all_of(processed.begin(), processed.end(), is_digit))
@@ -310,33 +271,26 @@ std::string process_word(const std::string &word, const Options &options)
     return "";
   }
 
-  if (options.hash_remove && processed.length() >= 32)
+  if (options.hash_remove && processed.size() >= 32)
   {
-    bool is_hash = true;
-    for (char c : processed)
+    const auto is_hex = [](char c) noexcept
     {
-      if (!is_digit(c) && (c < 'a' || c > 'f') && (c < 'A' || c > 'F'))
-      {
-        is_hash = false;
-        break;
-      }
-    }
-    if (is_hash)
+      return is_digit(c) ||
+             ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'));
+    };
+    if (std::all_of(processed.begin(), processed.end(), is_hex))
     {
       return "";
     }
   }
 
-  if (options.dup_sense > 0)
+  if (options.dup_sense > 0 && !processed.empty())
   {
-    std::unordered_map<char, int> char_count;
+    const double ratio_threshold = static_cast<double>(options.dup_sense) / 100.0;
     for (char c : processed)
     {
-      char_count[c]++;
-    }
-    for (const auto &pair : char_count)
-    {
-      if (static_cast<double>(pair.second) / processed.length() > options.dup_sense / 100.0)
+      const auto count_c = std::ranges::count(processed, c);
+      if (static_cast<double>(count_c) / processed.size() > ratio_threshold)
       {
         return "";
       }
@@ -345,7 +299,7 @@ std::string process_word(const std::string &word, const Options &options)
 
   if (options.email_sort && is_valid_email(processed))
   {
-    auto [username, domain] = split_email(processed);
+    const auto [username, domain] = split_email(processed);
     return username + " " + domain;
   }
 
@@ -364,21 +318,32 @@ std::string process_word(const std::string &word, const Options &options)
 
   std::string_view file_content(file->data(), file->size());
 
-  while (!file_content.empty())
+  auto try_add_word = [&](const std::string &candidate)
   {
-    auto line_end = file_content.find('\n');
-    std::string_view line_view = file_content.substr(0, line_end);
+    std::string processed = process_word(candidate, options);
+    if (!processed.empty() &&
+        (options.minlen == 0 || processed.size() >= static_cast<size_t>(options.minlen)) &&
+        (options.maxlen == 0 || processed.size() <= static_cast<size_t>(options.maxlen)))
+    {
+      words.push_back(processed);
+      total_words++;
+    }
+  };
 
-    std::string line_str(line_view);
+  for (auto line_range : file_content | std::views::split('\n'))
+  {
+    std::string line_str(line_range.begin(), line_range.end());
+
     if (options.dewebify)
     {
       line_str = strip_html_tags(line_str);
       if (options.noutf8)
       {
-        line_str.erase(std::remove_if(line_str.begin(), line_str.end(),
-                                      [](unsigned char c)
-                                      { return c <= 127; }),
-                       line_str.end());
+        line_str.erase(
+            std::remove_if(line_str.begin(), line_str.end(),
+                           [](unsigned char c)
+                           { return c <= 127; }),
+            line_str.end());
       }
     }
 
@@ -388,39 +353,20 @@ std::string process_word(const std::string &word, const Options &options)
       std::string subword;
       while (iss >> subword)
       {
-        std::string processed = process_word(subword, options);
-        if (!processed.empty() &&
-            (options.minlen == 0 || processed.length() >= static_cast<size_t>(options.minlen)) &&
-            (options.maxlen == 0 || processed.length() <= static_cast<size_t>(options.maxlen)))
-        {
-          words.push_back(processed);
-          total_words++;
-        }
+        try_add_word(subword);
       }
     }
     else
     {
-      std::string processed = process_word(line_str, options);
-      if (!processed.empty() &&
-          (options.minlen == 0 || processed.length() >= static_cast<size_t>(options.minlen)) &&
-          (options.maxlen == 0 || processed.length() <= static_cast<size_t>(options.maxlen)))
-      {
-        words.push_back(processed);
-        total_words++;
-      }
+      try_add_word(line_str);
     }
-
-    if (line_end == std::string_view::npos)
-    {
-      break;
-    }
-    file_content.remove_prefix(line_end + 1);
   }
 
   return true;
 }
 
-bool process_multiple_files(const std::vector<fs::path> &paths, std::vector<std::string> &words, std::atomic<size_t> &total_words, const Options &options)
+bool process_multiple_files(const std::vector<fs::path> &paths, std::vector<std::string> &words,
+                            std::atomic<size_t> &total_words, const Options &options)
 {
   for (const auto &path : paths)
   {
@@ -438,7 +384,7 @@ public:
   static std::unique_ptr<OutputFile> Create(const fs::path &path)
   {
     auto output = std::unique_ptr<OutputFile>(new OutputFile());
-    if (!output->Initialize(path))
+    if (!output->initialize(path))
     {
       return nullptr;
     }
@@ -454,7 +400,7 @@ public:
 private:
   OutputFile() = default;
 
-  bool Initialize(const fs::path &path)
+  bool initialize(const fs::path &path)
   {
     file_.open(path);
     return file_.is_open();
@@ -471,7 +417,6 @@ bool write_result_to_file(const std::vector<std::string> &words, const fs::path 
     std::cerr << "Error: Failed to open output file: " << output_path << std::endl;
     return false;
   }
-
   for (const auto &word : words)
   {
     if (!output->Write(word))
@@ -480,21 +425,22 @@ bool write_result_to_file(const std::vector<std::string> &words, const fs::path 
       return false;
     }
   }
-
   return true;
 }
 
 void print_header()
 {
   std::cout << PROGRAM_NAME << " " << PROGRAM_VERSION << " by " << PROGRAM_AUTHOR << std::endl;
-  std::cout << PROGRAM_COPYRIGHT << " (" << BUILD_DATE << "-" << BUILD_TIME << "-" << BUILD_PLATFORM << "-" << COMPILER_INFO << ")" << std::endl;
+  std::cout << PROGRAM_COPYRIGHT << " (" << BUILD_DATE << "-" << BUILD_TIME << "-"
+            << BUILD_PLATFORM << "-" << COMPILER_INFO << ")" << std::endl;
 }
 
 int main(int argc, char *argv[])
 {
-
   CLI::App app{PROGRAM_NAME};
-  app.set_version_flag("--version", std::string(PROGRAM_VERSION) + " (" + BUILD_DATE + " " + BUILD_TIME + " " + BUILD_PLATFORM + ")");
+  app.set_version_flag("--version",
+                       std::string(PROGRAM_VERSION) + " (" + BUILD_DATE + " " + BUILD_TIME + " " +
+                           BUILD_PLATFORM + ")");
 
   Options options{};
   fs::path output_path;
@@ -513,11 +459,12 @@ int main(int argc, char *argv[])
   app.add_flag("--wordify", options.wordify, "Convert all input sentences into separate words");
   app.add_flag("--no-numbers", options.no_numbers, "Ignore/delete words that are all numeric");
   app.add_option("--minlen", options.minlen, "Filter out words below a certain min length");
-  app.add_flag("--detab", options.detab, "Remove tabs or space from beginning of words");
+  app.add_flag("--detab", options.detab, "Remove tabs or spaces from beginning of words");
   app.add_option("--dup-sense", options.dup_sense, "Remove word if more than <specified>% of characters are duplicates");
   app.add_flag("--hash-remove", options.hash_remove, "Filter out word candidates that are actually hashes");
   app.add_flag("--email-sort", options.email_sort, "Convert email addresses to username and domain as separate words");
-  app.add_option("--email-split", options.email_split, "Extract email addresses to username and domain wordlists (format: user:domain)")
+  app.add_option("--email-split", options.email_split,
+                 "Extract email addresses to username and domain wordlists (format: user:domain)")
       ->expected(1);
   app.add_flag("--dewebify", options.dewebify, "Extract words from HTML input");
   app.add_flag("--noutf8", options.noutf8, "Only output non UTF-8 characters (works with --dewebify only)");
@@ -528,7 +475,7 @@ int main(int argc, char *argv[])
 
   if (!options.email_split.empty())
   {
-    size_t colon_pos = options.email_split.find(':');
+    const auto colon_pos = options.email_split.find(':');
     if (colon_pos != std::string::npos)
     {
       options.email_split_user = options.email_split.substr(0, colon_pos);
@@ -541,13 +488,15 @@ int main(int argc, char *argv[])
     }
   }
 
-  std::cout << PROGRAM_NAME << " version " << PROGRAM_VERSION << " (" << BUILD_DATE << " " << BUILD_TIME << " " << BUILD_PLATFORM << ")" << std::endl;
-  std::cout << PROGRAM_COPYRIGHT << std::endl;
-  std::cout << std::endl;
+  std::cout << PROGRAM_NAME << " version " << PROGRAM_VERSION << " (" << BUILD_DATE << " " << BUILD_TIME
+            << " " << BUILD_PLATFORM << ")" << std::endl;
+  std::cout << PROGRAM_COPYRIGHT << std::endl
+            << std::endl;
 
-  auto start = std::chrono::high_resolution_clock::now();
+  print_header();
 
-  std::atomic<size_t> total_words(0);
+  const auto start = std::chrono::high_resolution_clock::now();
+  std::atomic<size_t> total_words{0};
   std::vector<std::string> words;
 
   if (!process_multiple_files(input_paths, words, total_words, options))
@@ -557,13 +506,12 @@ int main(int argc, char *argv[])
 
   if (options.sort)
   {
-    std::sort(words.begin(), words.end());
+    std::ranges::sort(words);
   }
 
   if (options.deduplicate)
   {
-    auto last = std::unique(words.begin(), words.end());
-    words.erase(last, words.end());
+    words.erase(std::unique(words.begin(), words.end()), words.end());
   }
 
   if (!write_result_to_file(words, output_path))
@@ -572,10 +520,10 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  auto end = std::chrono::high_resolution_clock::now();
-  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-
-  std::cout << "Processed " << total_words << " total words (" << words.size() << " unique) in " << duration.count() << " ms" << std::endl;
+  const auto end = std::chrono::high_resolution_clock::now();
+  const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+  std::cout << "Processed " << total_words << " total words (" << words.size() << " unique) in "
+            << duration.count() << " ms" << std::endl;
 
   return 0;
 }
