@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 3.15)
 project(word_sorter)
 
 set(PROJECT_NAME "wordlist_sort")
-set(PROJECT_VERSION "0.1.0")
+set(PROJECT_VERSION "0.2.0")
 set(PROJECT_AUTHOR "Volker Schwaberow <volker@schwaberow.de>")
-set(PROJECT_COPYRIGHT "Copyright (c) 2024 Volker Schwaberow")
+set(PROJECT_COPYRIGHT "Copyright (c) 2024, 2025 Volker Schwaberow")
 
 if(WIN32)
     set(BUILD_PLATFORM_INFO "Windows")
