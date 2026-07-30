@@ -8,11 +8,13 @@
 #include <atomic>
 #include <chrono>
 #include <cctype> 
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <fstream>
-#include <iostream>
 #include <iterator>
+#include <print>
 #include <ranges>
 #include <sstream>
 #include <string>
@@ -86,20 +88,20 @@ private:
         std::ifstream file(path, std::ios::binary | std::ios::ate);
         if (!file)
         {
-            std::cerr << "FileBuffer Error: Unable to open file: " << path << std::endl;
+            std::println(stderr, "FileBuffer Error: Unable to open file: {}", path.string());
             return false;
         }
 
         std::streamsize size = file.tellg();
         if (size < 0) {
-            std::cerr << "FileBuffer Error: Unable to determine file size or file is empty: " << path << std::endl;
+            std::println(stderr, "FileBuffer Error: Unable to determine file size or file is empty: {}", path.string());
             return false;
         }
         file.seekg(0, std::ios::beg);
         file_contents_.resize(static_cast<size_t>(size));
         if (size > 0 && !file.read(file_contents_.data(), size))
         {
-            std::cerr << "FileBuffer Error: Unable to read file: " << path << std::endl;
+            std::println(stderr, "FileBuffer Error: Unable to read file: {}", path.string());
             return false;
         }
         return true;
@@ -309,7 +311,7 @@ std::string process_word(const std::string &word, const Options &options)
     if (options.email_sort && is_valid_email(processed))
     {
         const auto [username, domain] = split_email(processed);
-        return username + " " + domain; 
+        return std::format("{} {}", username, domain);
     }
 
     return processed;
@@ -321,7 +323,7 @@ std::string process_word(const std::string &word, const Options &options)
     auto file = BufferedFile::Create(path);
     if (!file)
     {
-        std::cerr << "Error: Failed to open file: " << path << std::endl;
+        std::println(stderr, "Error: Failed to open file: {}", path.string());
         return false;
     }
 
@@ -406,7 +408,7 @@ bool process_multiple_files_parallel(const std::vector<fs::path> &paths, std::ve
         if (!result.second)
         {
             all_tasks_successful = false;
-            std::cerr << "Error: Failed to process file." << std::endl;
+            std::println(stderr, "Error: Failed to process file.");
         }
         results_from_tasks.push_back(std::move(result.first));
     }
@@ -454,7 +456,7 @@ private:
     {
         file_.open(path);
         if (!file_.is_open()) {
-            std::cerr << "Error: Failed to open output file for writing: " << path << std::endl;
+            std::println(stderr, "Error: Failed to open output file for writing: {}", path.string());
             return false;
         }
         return true;
@@ -475,7 +477,7 @@ bool write_result_to_file(const std::vector<std::string> &words, const fs::path 
     {
         if (!output->Write(word))
         {
-            std::cerr << "Error: Failed to write to output file: " << output_path << std::endl;
+            std::println(stderr, "Error: Failed to write to output file: {}", output_path.string());
             return false;
         }
     }
@@ -484,21 +486,15 @@ bool write_result_to_file(const std::vector<std::string> &words, const fs::path 
 
 void print_header()
 {
-    
-    std::cout << PROGRAM_NAME << " " << PROGRAM_VERSION << " by " << PROGRAM_AUTHOR << std::endl;
-    std::cout << PROGRAM_COPYRIGHT << " (" << BUILD_DATE << "-" << BUILD_TIME << "-"
-              << BUILD_PLATFORM << "-" << COMPILER_INFO << ")" << std::endl;
+    std::println("{} {} by {}", PROGRAM_NAME, PROGRAM_VERSION, PROGRAM_AUTHOR);
+    std::println("{} ({}-{}-{}-{})", PROGRAM_COPYRIGHT, BUILD_DATE, BUILD_TIME, BUILD_PLATFORM, COMPILER_INFO);
 }
 
 int main(int argc, char *argv[])
 {
-    std::ios_base::sync_with_stdio(false); 
-    std::cin.tie(nullptr);
-
     CLI::App app{PROGRAM_NAME};
     app.set_version_flag("--version",
-                         std::string(PROGRAM_VERSION) + " (" + BUILD_DATE + " " + BUILD_TIME + " " +
-                             BUILD_PLATFORM + ")");
+                         std::format("{} ({} {} {})", PROGRAM_VERSION, BUILD_DATE, BUILD_TIME, BUILD_PLATFORM));
 
     Options options{};
     fs::path output_path;
@@ -541,14 +537,13 @@ int main(int argc, char *argv[])
         }
         else
         {
-            std::cerr << "Error: Invalid format for --email-split. Expected format: user_output_file:domain_output_file" << std::endl;
+            std::println(stderr, "Error: Invalid format for --email-split. Expected format: user_output_file:domain_output_file");
             return 1;
         }
     }
     
-    std::cout << PROGRAM_NAME << " version " << PROGRAM_VERSION << " (" << BUILD_DATE << " " << BUILD_TIME
-              << " " << BUILD_PLATFORM << ")" << std::endl;
-    std::cout << PROGRAM_COPYRIGHT << std::endl << std::endl;
+    std::println("{} version {} ({} {} {})", PROGRAM_NAME, PROGRAM_VERSION, BUILD_DATE, BUILD_TIME, BUILD_PLATFORM);
+    std::println("{}\n", PROGRAM_COPYRIGHT);
     
     const auto start_time = std::chrono::high_resolution_clock::now();
     std::atomic<size_t> total_words_processed{0}; 
@@ -557,7 +552,7 @@ int main(int argc, char *argv[])
     if (!process_multiple_files_parallel(input_paths, words, total_words_processed, options))
     {
         
-        std::cerr << "Warning: One or more files may have failed to process completely." << std::endl;  
+        std::println(stderr, "Warning: One or more files may have failed to process completely.");
     }
 
     if (options.sort)
@@ -569,7 +564,7 @@ int main(int argc, char *argv[])
     {
         if (!options.sort) { 
             std::ranges::sort(words); 
-            std::cout << "Note: Deduplication requires sorting. Words were sorted." << std::endl;
+            std::println("Note: Deduplication requires sorting. Words were sorted.");
         }
         words.erase(std::unique(words.begin(), words.end()), words.end());
     }
@@ -582,9 +577,8 @@ int main(int argc, char *argv[])
 
     const auto end_time = std::chrono::high_resolution_clock::now();
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-    std::cout << "Processed " << total_words_processed.load() << " words from input files, resulting in "
-              << words.size() << " words in the output list, in "
-              << duration.count() << " ms." << std::endl;
+    std::println("Processed {} words from input files, resulting in {} words in the output list, in {} ms.",
+                 total_words_processed.load(), words.size(), duration.count());
 
     return 0;
 }
