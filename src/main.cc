@@ -67,40 +67,44 @@ class FileBuffer
 public:
     static std::unique_ptr<FileBuffer> Create(const fs::path &path)
     {
-        try
+        auto buffer = std::unique_ptr<FileBuffer>(new FileBuffer());
+        if (!buffer->initialize(path))
         {
-            return std::unique_ptr<FileBuffer>(new FileBuffer(path));
-        }
-        catch (const std::exception &e)
-        {
-            std::cerr << "FileBuffer Error: " << e.what() << " for path: " << path << std::endl;
             return nullptr;
         }
+        return buffer;
     }
 
     const char *data() const { return file_contents_.data(); }
     std::size_t size() const { return file_contents_.size(); }
 
 private:
-    explicit FileBuffer(const fs::path &path)
+    FileBuffer() = default;
+
+    bool initialize(const fs::path &path)
     {
         std::ifstream file(path, std::ios::binary | std::ios::ate);
         if (!file)
         {
-            throw std::runtime_error("Unable to open file: " + path.string());
+            std::cerr << "FileBuffer Error: Unable to open file: " << path << std::endl;
+            return false;
         }
 
         std::streamsize size = file.tellg();
         if (size < 0) {
-             throw std::runtime_error("Unable to determine file size or file is empty: " + path.string());
+            std::cerr << "FileBuffer Error: Unable to determine file size or file is empty: " << path << std::endl;
+            return false;
         }
         file.seekg(0, std::ios::beg);
         file_contents_.resize(static_cast<size_t>(size));
         if (size > 0 && !file.read(file_contents_.data(), size))
         {
-            throw std::runtime_error("Unable to read file: " + path.string());
+            std::cerr << "FileBuffer Error: Unable to read file: " << path << std::endl;
+            return false;
         }
+        return true;
     }
+
     std::vector<char> file_contents_;
 };
 
