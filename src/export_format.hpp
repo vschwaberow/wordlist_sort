@@ -72,5 +72,11 @@ fst_fuzzy_search_bytes(std::span<const unsigned char> data, std::string_view que
 /// Count records in an already-loaded DJB CDB buffer (data section walk).
 [[nodiscard]] std::expected<std::size_t, std::string> cdb_key_count(std::span<const unsigned char> data);
 
+[[nodiscard]] std::expected<std::vector<std::string>, std::string>
+cdb_collect_keys(std::span<const unsigned char> data);
+
+[[nodiscard]] std::expected<std::vector<std::string>, std::string>
+fst_collect_keys(std::span<const unsigned char> data);
+
 /// Key count from WLTRIE1 header (unique keys), if buffer is a valid header prefix.
 [[nodiscard]] std::expected<std::uint32_t, std::string> fst_key_count(std::span<const unsigned char> data);

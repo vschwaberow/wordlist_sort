@@ -165,6 +165,49 @@ void write_u32_le(std::ostream &out, const std::uint32_t value)
     return read_u32_le(data.data() + 8);
 }
 
+[[nodiscard]] std::expected<std::vector<std::string>, std::string>
+fst_collect_keys(const std::span<const unsigned char> data)
+{
+    if (data.size() < 20)
+        return std::unexpected("FST/trie file too small");
+    if (std::memcmp(data.data(), kMagic, 8) != 0)
+        return std::unexpected("Not a WLTRIE1 FST/trie file");
+
+    const std::uint32_t expected_keys = read_u32_le(data.data() + 8);
+    const std::uint32_t node_count = read_u32_le(data.data() + 12);
+    const std::uint32_t edge_count = read_u32_le(data.data() + 16);
+    const std::size_t nodes_off = 20;
+    const std::size_t edges_off = nodes_off + static_cast<std::size_t>(node_count) * 8;
+    if (edges_off + static_cast<std::size_t>(edge_count) * 5 > data.size())
+        return std::unexpected("FST/trie truncated");
+
+    std::vector<std::string> keys;
+    keys.reserve(expected_keys);
+    std::string cur;
+
+    const auto dfs = [&](auto &&self, const std::uint32_t node) -> void {
+        if (node >= node_count)
+            return;
+        const unsigned char *np = data.data() + nodes_off + static_cast<std::size_t>(node) * 8;
+        const std::uint32_t packed = read_u32_le(np);
+        const bool terminal = (packed & 1u) != 0;
+        const std::uint32_t edge_count_n = packed >> 1;
+        const std::uint32_t edge_start = read_u32_le(np + 4);
+        if (terminal)
+            keys.push_back(cur);
+        for (std::uint32_t i = 0; i < edge_count_n; ++i)
+        {
+            const unsigned char *ep =
+                data.data() + edges_off + static_cast<std::size_t>(edge_start + i) * 5;
+            cur.push_back(static_cast<char>(ep[0]));
+            self(self, read_u32_le(ep + 1));
+            cur.pop_back();
+        }
+    };
+    dfs(dfs, 0);
+    return keys;
+}
+
 [[nodiscard]] std::expected<bool, std::string> fst_contains_bytes(const std::span<const unsigned char> data,
                                                                   const std::string_view key)
 {

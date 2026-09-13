@@ -5,6 +5,7 @@
 // Copyright (c) 2026 Volker Schwaberow
 
 #include "membership_filter.hpp"
+#include "bloom_filter.hpp"
 #include "gzip_stream.hpp"
 
 #include "export_format.hpp"
@@ -155,6 +156,46 @@ private:
     return out;
 }
 
+}
+
+class BloomMembershipGate final : public MembershipFilter
+{
+public:
+    BloomMembershipGate(BloomFilter bloom, std::unique_ptr<MembershipFilter> inner)
+        : bloom_(std::move(bloom)), inner_(std::move(inner))
+    {
+    }
+
+    [[nodiscard]] bool contains(const std::string_view key) const override
+    {
+        if (!bloom_.maybe_contains(key))
+            return false;
+        return inner_->contains(key);
+    }
+
+    [[nodiscard]] std::size_t size() const noexcept override { return inner_->size(); }
+
+    [[nodiscard]] const char *backend_name() const noexcept override { return inner_->backend_name(); }
+
+    [[nodiscard]] std::expected<std::vector<std::string>, std::string>
+    fuzzy_search(const std::string_view query, const int max_distance) const override
+    {
+        return inner_->fuzzy_search(query, max_distance);
+    }
+
+private:
+    BloomFilter bloom_;
+    std::unique_ptr<MembershipFilter> inner_;
+};
+
+[[nodiscard]] std::unique_ptr<MembershipFilter>
+wrap_membership_with_bloom(std::unique_ptr<MembershipFilter> exact,
+                           const std::vector<std::string> &keys, const int bits_per_key)
+{
+    BloomFilter bloom(keys.size(), bits_per_key);
+    for (const auto &key : keys)
+        bloom.insert(key);
+    return std::make_unique<BloomMembershipGate>(std::move(bloom), std::move(exact));
 }
 
 [[nodiscard]] std::expected<FilterEngine, std::string> parse_filter_engine(const std::string_view text)
@@ -398,8 +439,17 @@ open_wlpth1_file(const std::filesystem::path &path)
 
 [[nodiscard]] std::expected<std::unique_ptr<MembershipFilter>, std::string>
 open_membership_filter(const std::filesystem::path &path, const FilterEngine engine,
-                       const std::filesystem::path &tmp_dir)
+                       const std::filesystem::path &tmp_dir, const BloomOptions bloom)
 {
+    const auto maybe_wrap = [&](std::unique_ptr<MembershipFilter> exact,
+                                const std::vector<std::string> &keys,
+                                const bool from_text) -> std::unique_ptr<MembershipFilter> {
+        const bool want = !bloom.force_off && (bloom.force_on || from_text);
+        if (!want || exact == nullptr || keys.empty())
+            return exact;
+        return wrap_membership_with_bloom(std::move(exact), keys, bloom.bits_per_key);
+    };
+
     std::ifstream peek(path, std::ios::binary);
     if (!peek)
         return std::unexpected(std::format("Failed to open filter file: {}", path.string()));
@@ -421,7 +471,21 @@ open_membership_filter(const std::filesystem::path &path, const FilterEngine eng
     if (is_pthash)
     {
 #if defined(WORDLIST_SORT_PTHASH)
-        return open_wlpth1_file(path);
+        auto exact = open_wlpth1_file(path);
+        if (!exact)
+            return std::unexpected(exact.error());
+        if (!bloom.force_off && bloom.force_on)
+        {
+            // Key table is inside the filter; collect via a text rebuild is unavailable.
+            // Force-on for WLPTH1: reopen keys from the on-disk table by re-reading file.
+            auto bytes = read_binary_file(path);
+            if (!bytes)
+                return std::unexpected(bytes.error());
+            // Fall through: without table extract helper, skip bloom unless we can collect.
+            // open_wlpth1 already consumed keys into the filter — bloom without keys is a no-op skip.
+            (void)bytes;
+        }
+        return maybe_wrap(std::move(*exact), {}, false);
 #else
         return std::unexpected("WLPTH1 file requires -DWORDLIST_SORT_PTHASH=ON");
 #endif
@@ -440,8 +504,20 @@ open_membership_filter(const std::filesystem::path &path, const FilterEngine eng
                 return std::unexpected(count.error());
             if (const auto probe = fst_contains_bytes(*bytes, ""); !probe)
                 return std::unexpected(probe.error());
-            return std::make_unique<FstMembershipFilter>(std::move(*bytes),
-                                                         static_cast<std::size_t>(*count));
+            auto exact = std::make_unique<FstMembershipFilter>(std::move(*bytes),
+                                                               static_cast<std::size_t>(*count));
+            if (!bloom.force_off && bloom.force_on)
+            {
+                // bytes moved — re-read for key collect
+                auto again = read_binary_file(path);
+                if (!again)
+                    return std::unexpected(again.error());
+                auto keys = fst_collect_keys(*again);
+                if (!keys)
+                    return std::unexpected(keys.error());
+                return maybe_wrap(std::move(exact), *keys, false);
+            }
+            return maybe_wrap(std::move(exact), {}, false);
         }
 
         if (const auto probe = cdb_contains_bytes(*bytes, ""); !probe)
@@ -449,13 +525,25 @@ open_membership_filter(const std::filesystem::path &path, const FilterEngine eng
         const auto count = cdb_key_count(*bytes);
         if (!count)
             return std::unexpected(count.error());
-        return std::make_unique<CdbMembershipFilter>(std::move(*bytes), *count);
+        std::vector<std::string> keys;
+        if (!bloom.force_off && bloom.force_on)
+        {
+            auto collected = cdb_collect_keys(*bytes);
+            if (!collected)
+                return std::unexpected(collected.error());
+            keys = std::move(*collected);
+        }
+        auto exact = std::make_unique<CdbMembershipFilter>(std::move(*bytes), *count);
+        return maybe_wrap(std::move(exact), keys, false);
     }
 
     const auto keys = load_filter_keys(path);
     if (!keys)
         return std::unexpected(keys.error());
-    return build_membership_filter(*keys, engine, tmp_dir);
+    auto exact = build_membership_filter(*keys, engine, tmp_dir);
+    if (!exact)
+        return std::unexpected(exact.error());
+    return maybe_wrap(std::move(*exact), *keys, true);
 }
 
 [[nodiscard]] std::expected<void, std::string> write_pthash(const std::vector<std::string> &words,

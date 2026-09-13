@@ -198,6 +198,43 @@ struct RecordRef
     return count;
 }
 
+[[nodiscard]] std::expected<std::vector<std::string>, std::string>
+cdb_collect_keys(const std::span<const unsigned char> data)
+{
+    const auto file_size = static_cast<std::uint64_t>(data.size());
+    if (file_size < kCdbHeaderSize)
+        return std::unexpected("CDB file too small");
+
+    std::uint64_t data_end = file_size;
+    for (std::uint32_t i = 0; i < 256; ++i)
+    {
+        const std::uint32_t table_offset = read_u32_le(data.data() + i * 8);
+        const std::uint32_t nslots = read_u32_le(data.data() + i * 8 + 4);
+        if (nslots == 0)
+            continue;
+        if (static_cast<std::uint64_t>(table_offset) < data_end)
+            data_end = table_offset;
+    }
+    if (data_end < kCdbHeaderSize)
+        return std::unexpected("CDB tables overlap header");
+
+    std::vector<std::string> keys;
+    std::uint64_t pos = kCdbHeaderSize;
+    while (pos + 8 <= data_end)
+    {
+        const std::uint32_t klen = read_u32_le(data.data() + pos);
+        const std::uint32_t vlen = read_u32_le(data.data() + pos + 4);
+        const std::uint64_t next = pos + 8ULL + klen + vlen;
+        if (next > data_end)
+            return std::unexpected("CDB data section truncated");
+        keys.emplace_back(reinterpret_cast<const char *>(data.data() + pos + 8), klen);
+        pos = next;
+    }
+    if (pos != data_end)
+        return std::unexpected("CDB data section misaligned");
+    return keys;
+}
+
 [[nodiscard]] std::expected<bool, std::string> cdb_contains_bytes(const std::span<const unsigned char> data,
                                                                   const std::string_view key)
 {

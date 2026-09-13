@@ -90,6 +90,8 @@ constexpr std::array flag_specs{
     FlagSpec{"--recursive",    &Options::recursive,    "Recurse into directory inputs for .txt and compressed wordlists"},
     FlagSpec{"--fuzzy",        &Options::fuzzy,        "Fuzzy lookup via Levenshtein on FST (--lookup or query on WLTRIE1)"},
     FlagSpec{"--miss",         &Options::miss,         "With query: emit non-hits instead of hits"},
+    FlagSpec{"--bloom",        &Options::bloom,        "Force Bloom early-drop gate on membership filters"},
+    FlagSpec{"--no-bloom",     &Options::no_bloom,     "Disable Bloom early-drop (overrides auto-on for text filters)"},
     FlagSpec{"-r",             &Options::recursive,    "Short form of --recursive"},
     FlagSpec{"--deduplicate",  &Options::deduplicate,  "Remove duplicate words (implies --sort)"},
     FlagSpec{"--cuda",         &Options::cuda,         "Use GPU for sort/dedup when built with CUDA and word count exceeds threshold"},
@@ -121,6 +123,7 @@ constexpr std::array int_opt_specs{
     IntOptSpec{"--sample", &Options::sample_n, "Reservoir-sample N accepted survivors (0=off)"},
     IntOptSpec{"--field", &Options::field, "Select 1-based field from each line before transforms (0=off)"},
     IntOptSpec{"--distance", &Options::distance, "Max edit distance for --fuzzy (0-3; default 1)"},
+    IntOptSpec{"--bloom-bits", &Options::bloom_bits, "Bloom bits per key for early-drop (4-24; default 10)"},
 };
 
 constexpr std::array str_opt_specs{
@@ -599,7 +602,16 @@ int main(const int argc, char *argv[])
             filter_path = args.options.intersect_path;
         else
             filter_path = args.options.lookup_path;
-        auto filter = open_membership_filter(filter_path, *engine, tmp_dir_path);
+        if (args.options.bloom && args.options.no_bloom)
+        {
+            std::println(stderr, "Error: --bloom and --no-bloom are mutually exclusive");
+            return 1;
+        }
+        BloomOptions bloom_opts;
+        bloom_opts.force_on = args.options.bloom;
+        bloom_opts.force_off = args.options.no_bloom;
+        bloom_opts.bits_per_key = args.options.bloom_bits;
+        auto filter = open_membership_filter(filter_path, *engine, tmp_dir_path, bloom_opts);
         if (!filter)
         {
             std::println(stderr, "Error: {}", filter.error());
