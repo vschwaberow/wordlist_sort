@@ -7,3 +7,5 @@ CMakeUserPresets.json
 # Local/generated
 build-cuda/
 compile_commands.json
+
+scratch/

@@ -10,6 +10,7 @@ Guide for AI agents working in this repository. Captures non-obvious knowledge t
 - `src/word_pipeline.{hpp,cc}` — per-word/file filter pipeline
 - `src/sort_dedup_*.{hpp,cc,cu}` — optional CUDA sort/dedup (`WORDLIST_SORT_CUDA`)
 - `src/export_format.*` / `cdb_export.cc` / `fst_export.cc` — `--format text|cdb|fst` writers
+- `src/membership_filter.*` — `--exclude` / `--intersect` with `hash|fst|pthash` engines
 
 Hand-rolled CLI parser (no CLI11).
 
@@ -104,6 +105,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **`--deduplicate` silently forces a sort** even without `--sort`, and prints a note to stdout. Dedup requires sorted input (`std::unique` only removes *consecutive* duplicates).
 - **Threading is one `std::async` task per input file** (`std::launch::async`), with no thread pool or concurrency cap. Passing hundreds of files spawns hundreds of threads. Each task reads its file fully into memory, so peak RAM scales with concurrent file sizes.
 - **`--cuda` / `--no-cuda` / `--cuda-threshold`**: GPU sort/dedup (compile-time optional via `-DWORDLIST_SORT_CUDA=ON`). See gotcha §6.
+- **`--exclude` / `--intersect` / `--filter-engine`**: set difference or intersection against a side file; engines `hash`, `fst`, `pthash` (`WORDLIST_SORT_PTHASH`, default ON).
 - **`--format text|cdb|fst`**: output encoder after sort/dedup (`cdb` = DJB Constant Database, `fst` = WLTRIE1 compact trie). Duplicate keys keep the first occurrence.
 - **`--dup-sense N` (0–100)** rejects a word if *any single byte* exceeds `N%` of the word's length (uses a 256-bucket `std::array<unsigned int, 256>` char histogram).
 

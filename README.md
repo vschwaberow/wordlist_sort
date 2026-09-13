@@ -58,6 +58,9 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--dup-sense <int>` | Remove word if any single char exceeds N% (0–100) |
 | `--cuda-threshold <int>` | Minimum word count before GPU sort/dedup (default: 10000000; `0` = auto ≈100k; requires `--cuda`) |
 | `--format <str>` | Output format: `text` (default), `cdb` (DJB Constant Database), `fst` (compact trie / WLTRIE1) |
+| `--exclude <file>` | Drop words that occur in FILE (set difference A\\B) |
+| `--intersect <file>` | Keep only words that also occur in FILE (A∩B) |
+| `--filter-engine <str>` | Membership backend for exclude/intersect: `hash` (default), `fst`, `pthash` |
 
 ### Flags
 
@@ -84,6 +87,27 @@ Without a CUDA build, `--cuda` prints a note and uses the CPU path. If a CUDA ru
 
 GPU transfers use **pinned host memory**. Before launching, the tool checks free VRAM against a conservative working-set estimate. If the full list does not fit, it switches to a **chunked out-of-core** GPU path (sort each VRAM-sized chunk, then k-way merge on the host). `--cuda-threshold 0` selects an auto minimum (~100k words) instead of the 10M default.
 
+
+
+## Set filters (`--exclude` / `--intersect`)
+
+Build a membership index from FILE B, then keep/drop words from the processed inputs (A):
+
+```bash
+# A \ B  (remove words listed in blocklist.txt)
+./build/wordlist_sort --exclude blocklist.txt --filter-engine=pthash --sort --deduplicate out.txt a1.txt a2.txt
+
+# A ∩ B
+./build/wordlist_sort --intersect allow.txt --filter-engine=fst --sort out.txt input.txt
+```
+
+| Engine | Notes |
+|--------|-------|
+| `hash` | `unordered_set` (always available; highest RAM) |
+| `fst` | Builds a temporary WLTRIE1 trie from B |
+| `pthash` | Minimal perfect hash + key table (needs `-DWORDLIST_SORT_PTHASH=ON`, default ON). PTHash may enable host-specific ISA flags via its INTERFACE. |
+
+`--exclude` and `--intersect` are mutually exclusive.
 
 ## Output formats
 

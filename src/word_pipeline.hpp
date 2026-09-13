@@ -40,6 +40,9 @@ struct Options
     bool cuda_timing = false;
     int cuda_threshold = 10'000'000;
     std::string format = "text";
+    std::string exclude_path;
+    std::string intersect_path;
+    std::string filter_engine = "hash";
 };
 
 [[nodiscard]] constexpr bool is_digit_char(char c) noexcept;

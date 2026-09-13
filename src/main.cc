@@ -5,6 +5,7 @@
 // Copyright (c) 2026 Volker Schwaberow
 
 #include "export_format.hpp"
+#include "membership_filter.hpp"
 #include "sort_dedup.hpp"
 #include "word_pipeline.hpp"
 
@@ -87,6 +88,9 @@ constexpr std::array int_opt_specs{
 
 constexpr std::array str_opt_specs{
     StrOptSpec{"--format", &Options::format, "Output format: text (default), cdb (DJB Constant Database), fst (compact trie)"},
+    StrOptSpec{"--exclude", &Options::exclude_path, "Drop words present in FILE (set difference A\\B)"},
+    StrOptSpec{"--intersect", &Options::intersect_path, "Keep only words also present in FILE (A∩B)"},
+    StrOptSpec{"--filter-engine", &Options::filter_engine, "Membership engine for --exclude/--intersect: hash (default), fst, pthash"},
 };
 
 constexpr std::size_t compute_help_col_width()
@@ -280,6 +284,49 @@ int main(const int argc, char *argv[])
 
     if (!process_multiple_files_parallel(args.input_paths, words, total_words_processed, args.options))
         std::println(stderr, "Warning: One or more files may have failed to process completely.");
+
+    if (!args.options.exclude_path.empty() && !args.options.intersect_path.empty())
+    {
+        std::println(stderr, "Error: --exclude and --intersect are mutually exclusive");
+        return 1;
+    }
+
+    if (!args.options.exclude_path.empty() || !args.options.intersect_path.empty())
+    {
+        const auto engine = parse_filter_engine(args.options.filter_engine);
+        if (!engine)
+        {
+            std::println(stderr, "Error: {}", engine.error());
+            return 1;
+        }
+
+        const std::filesystem::path filter_path = !args.options.exclude_path.empty()
+                                                      ? args.options.exclude_path
+                                                      : args.options.intersect_path;
+        const auto filter_keys = load_filter_keys(filter_path);
+        if (!filter_keys)
+        {
+            std::println(stderr, "Error: {}", filter_keys.error());
+            return 1;
+        }
+
+        const auto filter = build_membership_filter(*filter_keys, *engine);
+        if (!filter)
+        {
+            std::println(stderr, "Error: {}", filter.error());
+            return 1;
+        }
+
+        const bool exclude = !args.options.exclude_path.empty();
+        std::erase_if(words, [&](const std::string &word) {
+            const bool hit = (*filter)->contains(word);
+            return exclude ? hit : !hit;
+        });
+
+        std::println("Applied {} filter via {} ({} keys) → {} words remain.",
+                     exclude ? "exclude" : "intersect", filter_engine_name(*engine), (*filter)->size(),
+                     words.size());
+    }
 
     sort_and_deduplicate_words(words, SortDedupOptions{
                                            .sort = args.options.sort,
