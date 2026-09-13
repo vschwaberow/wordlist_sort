@@ -228,6 +228,17 @@ CUDA builds add `sort_dedup_cuda_test` (label `cuda`). Convenience wrappers:
 ./build_and_test_cuda.sh
 ```
 
+## Release notes
+
+### v0.4.0
+
+Since `v0.3.0`:
+
+- Optional CUDA sort/dedup (threshold, pinned transfers, timing, chunked OOC)
+- Buffered ~1 MiB record I/O; gzip/zstd/xz/lz4 input and text output; `--compress` for stdout
+- Export formats `cdb` / `fst` / `pthash`; `--exclude` / `--intersect` / `--lookup`; FST `--fuzzy`/`--distance`
+- CLI ergonomics: `-o`, `-q`, `--jobs`, `--sort-chunk`, `--limit`, `--progress`, `--stats`, transforms/filters, glob/`-r`, single-file parallel split
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
