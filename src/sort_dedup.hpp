@@ -58,4 +58,9 @@ void announce_implicit_sort_if_needed(const SortDedupPlan &plan);
 
 void sort_and_deduplicate_words_cpu(std::vector<std::string> &words, const SortDedupPlan &plan);
 
+/// K-way merge of already-sorted runs; optional cross-run deduplication.
+void merge_sorted_word_runs(std::vector<std::vector<std::string>> runs,
+                            bool deduplicate,
+                            std::vector<std::string> &out);
+
 void sort_and_deduplicate_words(std::vector<std::string> &words, const SortDedupOptions &options);
