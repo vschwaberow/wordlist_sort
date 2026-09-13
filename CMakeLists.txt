@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 project(wordlist_sort LANGUAGES CXX)
 
 set(PROJECT_NAME "wordlist_sort")
-set(PROJECT_VERSION "0.4.0")
+set(PROJECT_VERSION "0.5.0")
 set(PROJECT_AUTHOR "Volker Schwaberow <volker@schwaberow.de>")
 set(PROJECT_COPYRIGHT "Copyright (c) 2024-2026 Volker Schwaberow")
 
@@ -45,19 +45,40 @@ option(WORDLIST_SORT_CUDA "Enable CUDA-accelerated sort/dedup" OFF)
 option(WORDLIST_SORT_BUILD_TESTS "Build GoogleTest suite and register CTest targets" ON)
 option(WORDLIST_SORT_BUILD_BENCHMARKS "Build sort/dedup CPU baseline benchmark harness" ON)
 option(WORDLIST_SORT_NATIVE_ARCH "Add -march=native on GCC/Clang (non-portable)" OFF)
+option(WORDLIST_SORT_PTHASH "Enable PTHash membership engine for --exclude/--intersect" ON)
 
 set(WORDLIST_SORT_CORE_SOURCES
     src/word_pipeline.cc
     src/sort_dedup_cpu.cc
     src/export_format.cc
     src/cdb_export.cc
-    src/fst_export.cc)
+    src/fst_export.cc
+    src/membership_filter.cc)
 
 add_executable(wordlist_sort
     src/main.cc
     ${WORDLIST_SORT_CORE_SOURCES})
 
 target_include_directories(wordlist_sort PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+if(WORDLIST_SORT_PTHASH)
+    include(FetchContent)
+    FetchContent_Declare(
+        pthash
+        GIT_REPOSITORY https://github.com/jermp/pthash.git
+        GIT_TAG v2.0.0
+        GIT_SHALLOW TRUE
+        GIT_SUBMODULES_RECURSE TRUE)
+    set(PTHASH_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(pthash)
+    target_link_libraries(wordlist_sort PRIVATE PTHASH)
+    # pthash.hpp lives under include/ and is included as "include/pthash.hpp"
+    target_include_directories(wordlist_sort PRIVATE ${pthash_SOURCE_DIR})
+    target_compile_definitions(wordlist_sort PRIVATE WORDLIST_SORT_PTHASH=1)
+    # PTHash headers are not -Wconversion/-Werror clean; isolate that TU.
+    set_source_files_properties(src/membership_filter.cc PROPERTIES
+        COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang>:-Wno-conversion;-Wno-float-conversion;-Wno-unused-but-set-variable;-Wno-error>")
+endif()
 
 if(WORDLIST_SORT_CUDA)
     enable_language(CUDA)
