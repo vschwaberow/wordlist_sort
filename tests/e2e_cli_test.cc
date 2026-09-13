@@ -535,3 +535,17 @@ TEST(E2eCli, ReverseChars)
     EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
     EXPECT_EQ(test_helpers::read_text_file(output), "cba\n");
 }
+
+TEST(E2eCli, PrefixSuffixFilter)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "alpha\nbeta\nalgebra\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --prefix al --suffix a --sort " + shell_quote(output.string()) +
+                                                " " + shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(output), "algebra\nalpha\n");
+}

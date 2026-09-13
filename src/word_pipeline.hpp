@@ -59,6 +59,8 @@ struct Options
     /// Cap accepted survivors during ingest (0 = unlimited).
     int limit = 0;
     std::string tmp_dir;
+    std::string prefix;
+    std::string suffix;
     std::string format = "text";
     std::string exclude_path;
     std::string intersect_path;

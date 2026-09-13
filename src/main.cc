@@ -117,6 +117,8 @@ constexpr std::array str_opt_specs{
     StrOptSpec{"--output", &Options::output_override, "Output path or - for stdout (alternative to positional <output>)"},
     StrOptSpec{"-o", &Options::output_override, "Short form of --output"},
     StrOptSpec{"--tmp-dir", &Options::tmp_dir, "Directory for external-sort / filter temp files (default: system temp)"},
+    StrOptSpec{"--prefix", &Options::prefix, "Keep only words that start with PREFIX"},
+    StrOptSpec{"--suffix", &Options::suffix, "Keep only words that end with SUFFIX"},
 };
 
 constexpr std::size_t compute_help_col_width()
