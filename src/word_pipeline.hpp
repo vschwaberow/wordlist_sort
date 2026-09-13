@@ -63,6 +63,11 @@ struct Options
     ExternalSortBuilder *external_sort = nullptr;
 };
 
+[[nodiscard]] inline bool is_stdio_path(const std::filesystem::path &path) noexcept
+{
+    return path == "-";
+}
+
 [[nodiscard]] constexpr bool is_digit_char(char c) noexcept;
 [[nodiscard]] constexpr bool is_alpha_char(char c) noexcept;
 [[nodiscard]] constexpr bool is_alnum_char(char c) noexcept;
