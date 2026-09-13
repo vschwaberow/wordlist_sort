@@ -147,3 +147,23 @@ TEST(WordPipeline, JobsCapStillProcesses)
     EXPECT_EQ(words[0], "one");
     EXPECT_EQ(words[1], "two");
 }
+
+TEST(WordPipeline, Noutf8WithoutDewebify)
+{
+    const auto dir = test_helpers::make_temp_dir();
+    std::filesystem::create_directories(dir);
+    const auto input = dir / "in.txt";
+    {
+        std::ofstream out(input, std::ios::binary);
+        out << "caf\xc3\xa9\nplain\n";
+    }
+
+    Options options;
+    options.noutf8 = true;
+    std::vector<std::string> words;
+    std::atomic<std::size_t> counter{0};
+    ASSERT_TRUE(process_file(input, words, counter, options));
+    ASSERT_EQ(words.size(), 2u);
+    EXPECT_EQ(words[0], "caf");
+    EXPECT_EQ(words[1], "plain");
+}

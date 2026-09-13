@@ -262,11 +262,10 @@ void trim_special_inplace(std::string &str) noexcept
             line_str.pop_back();
 
         if (options.dewebify)
-        {
             line_str = strip_html_tags(line_str);
-            if (options.noutf8)
-                std::erase_if(line_str, [](const unsigned char c) { return c > 127; });
-        }
+
+        if (options.noutf8)
+            std::erase_if(line_str, [](const unsigned char c) { return c > 127; });
 
         if (options.wordify)
         {

@@ -101,7 +101,7 @@ cmake --build build-cuda -j
 These are behaviors not clearly documented and easy to get wrong:
 
 - **Positional order: OUTPUT first, then inputs.** Positional parsing registers output before inputs. Usage is `wordlist_sort <out> <in1> [in2 ...]`, opposite of most CLIs.
-- **`--noutf8` only does anything when combined with `--dewebify`.** The non-ASCII (>127) stripping lives inside the `if (options.dewebify)` block in `process_file`. Alone, `--noutf8` has no effect.
+- **`--noutf8`** strips bytes `>127` on every input line (independent of `--dewebify`).
 - **`--deduplicate` silently forces a sort** even without `--sort`, and prints a note to stdout. Dedup requires sorted input (`std::unique` only removes *consecutive* duplicates).
 - **Threading is one `std::async` task per input file** (`std::launch::async`), with no thread pool or concurrency cap. Default (omit `--jobs`) caps concurrency at `hardware_concurrency` via a counting semaphore; `--jobs 0` restores unlimited one-task-per-file. Each task streams its file line-by-line.
 - **`--jobs`**: omit = auto CPU count (default), `0` unlimited, `>0` cap.
