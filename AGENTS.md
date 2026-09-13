@@ -112,6 +112,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **`--compress gzip|zstd|xz|lz4`** (aliases `gz`/`zst`): compress `--format=text` written to stdout `-` via the same encoders as extension-based file output; rejected for file outputs and binary formats.
 - **`--lookup INDEX`**: query inputs against a prebuilt membership index (`.cdb` / `WLTRIE1` / `WLPTH1`, or text with `--filter-engine`); keep hits only. Mutually exclusive with `--exclude` / `--intersect`.
 - **`--fuzzy` / `--distance N`**: with `--lookup` on a WLTRIE1 FST, expand each query to index keys within Levenshtein distance N (default 1, max 3). CDB/PTHash/text indexes are rejected.
+- **Single-file parallel split**: with one plain (non-compressed, non-stdin) input, `--jobs N` (N>1) or auto jobs on files ≥8 MiB splits the file into byte ranges aligned to record boundaries; compressed inputs stay one task per file.
 - **`--upper`**: uppercase each survivor; if both `--lower` and `--upper` are set, `--upper` wins.
 - **`--reverse`**: reverse character order within each survivor (after case transforms).
 - **`--prefix` / `--suffix`**: keep survivors that start/end with the given string (after transforms; empty = off).

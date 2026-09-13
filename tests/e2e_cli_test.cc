@@ -866,3 +866,28 @@ TEST(E2eCli, FuzzyRequiresFstLookup)
                                                 shell_quote(queries.string()));
     EXPECT_NE(result.exit_code, 0);
 }
+
+TEST(E2eCli, ParallelFileSplitMatchesSerial)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path out1 = work / "out1.txt";
+    const fs::path out2 = work / "out2.txt";
+    std::string payload;
+    for (int i = 0; i < 2000; ++i)
+        payload += "word" + std::to_string(i % 50) + "\n";
+    test_helpers::write_text_file(input, payload);
+
+    const auto serial = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                  " -q --jobs 1 --sort --deduplicate -o " +
+                                                  shell_quote(out1.string()) + " " +
+                                                  shell_quote(input.string()));
+    EXPECT_EQ(serial.exit_code, 0) << serial.stderr_text;
+
+    const auto parallel = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                    " -q --jobs 4 --sort --deduplicate -o " +
+                                                    shell_quote(out2.string()) + " " +
+                                                    shell_quote(input.string()));
+    EXPECT_EQ(parallel.exit_code, 0) << parallel.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(out1), test_helpers::read_text_file(out2));
+}

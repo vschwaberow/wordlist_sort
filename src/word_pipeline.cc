@@ -20,6 +20,7 @@
 #include <optional>
 #include <mutex>
 #include <semaphore>
+#include <system_error>
 #include <thread>
 #include <print>
 #include <ranges>
@@ -284,11 +285,29 @@ void trim_special_inplace(std::string &str) noexcept
 [[nodiscard]] bool process_file(const fs::path &path,
                                 std::vector<std::string> &output_words,
                                 std::atomic<std::size_t> &total_words_processed_counter,
-                                const Options &options)
+                                const Options &options,
+                                const std::optional<std::pair<std::uint64_t, std::uint64_t>> *byte_range)
 {
     std::unique_ptr<std::istream> owned_in;
+    std::ifstream ranged_file;
     std::istream *in = nullptr;
-    if (is_stdio_path(path))
+    const bool use_range = byte_range != nullptr && byte_range->has_value();
+    if (use_range)
+    {
+        if (is_stdio_path(path))
+        {
+            std::println(stderr, "Error: byte-range parallel split cannot use stdin");
+            return false;
+        }
+        ranged_file.open(path, std::ios::binary);
+        if (!ranged_file)
+        {
+            std::println(stderr, "Error: Unable to open file: {}", path.string());
+            return false;
+        }
+        in = &ranged_file;
+    }
+    else if (is_stdio_path(path))
     {
         in = &std::cin;
     }
@@ -427,18 +446,15 @@ void trim_special_inplace(std::string &str) noexcept
         static_cast<void>(emit_one(std::move(*processed)));
     };
 
-    BufferedRecordReader reader(*in, record_sep);
-    std::string line_str;
-    while (reader.next(line_str))
-    {
+    const auto handle_line = [&](std::string line_str) {
         if (limit_reached())
-            break;
+            return;
 
         if (options.skip_comments)
         {
             const auto first = line_str.find_first_not_of(" \t");
             if (first != std::string::npos && line_str[first] == '#')
-                continue;
+                return;
         }
 
         if (options.dewebify)
@@ -452,7 +468,7 @@ void trim_special_inplace(std::string &str) noexcept
             const char delim = field_delimiter_char(options.delimiter);
             const auto field_view = extract_field(line_str, options.field, delim);
             if (!field_view)
-                continue;
+                return;
             line_str.assign(*field_view);
         }
 
@@ -491,6 +507,58 @@ void trim_special_inplace(std::string &str) noexcept
             {
                 try_add_word(line_str);
             }
+        }
+    };
+
+    if (use_range)
+    {
+        const auto begin = byte_range->value().first;
+        const auto end_pos = byte_range->value().second;
+        ranged_file.seekg(static_cast<std::streamoff>(begin));
+        if (!ranged_file)
+        {
+            std::println(stderr, "Error: Unable to seek in file: {}", path.string());
+            return false;
+        }
+        if (begin > 0)
+        {
+            char c = 0;
+            while (ranged_file.get(c))
+            {
+                if (c == record_sep)
+                    break;
+            }
+        }
+        std::string line_str;
+        while (true)
+        {
+            if (limit_reached())
+                break;
+            const auto record_start = ranged_file.tellg();
+            if (!ranged_file.good() || record_start < 0)
+                break;
+            if (static_cast<std::uint64_t>(record_start) >= end_pos)
+                break;
+            if (!std::getline(ranged_file, line_str, record_sep))
+            {
+                if (!line_str.empty())
+                    handle_line(std::move(line_str));
+                break;
+            }
+            if (record_sep == '\n' && !line_str.empty() && line_str.back() == '\r')
+                line_str.pop_back();
+            handle_line(std::move(line_str));
+        }
+    }
+    else
+    {
+        BufferedRecordReader reader(*in, record_sep);
+        std::string line_str;
+        while (reader.next(line_str))
+        {
+            if (limit_reached())
+                break;
+            handle_line(std::move(line_str));
         }
     }
 
@@ -581,6 +649,30 @@ void trim_special_inplace(std::string &str) noexcept
     return true;
 }
 
+
+[[nodiscard]] bool path_is_compressed_input(const fs::path &path) noexcept
+{
+    return path_looks_gzip(path) || path_looks_zstd(path) || path_looks_xz(path) || path_looks_lz4(path);
+}
+
+inline constexpr std::uint64_t kParallelSplitMinBytes = 8ull << 20; // 8 MiB
+
+[[nodiscard]] std::size_t resolve_split_workers(const int jobs, const std::uint64_t file_size) noexcept
+{
+    if (jobs == 1)
+        return 1;
+    const unsigned hw = std::thread::hardware_concurrency();
+    const std::size_t auto_jobs = hw == 0 ? 1u : static_cast<std::size_t>(hw);
+    if (jobs > 1)
+        return static_cast<std::size_t>(jobs);
+    if (jobs == 0)
+        return auto_jobs;
+    // auto (-1): only split large files
+    if (file_size >= kParallelSplitMinBytes)
+        return auto_jobs;
+    return 1;
+}
+
 [[nodiscard]] std::size_t resolve_job_limit(const int jobs, const std::size_t path_count) noexcept
 {
     if (path_count == 0)
@@ -608,24 +700,63 @@ void trim_special_inplace(std::string &str) noexcept
     }
 
     std::vector<std::future<std::pair<std::vector<std::string>, bool>>> futures;
-    futures.reserve(paths.size());
 
-    const std::size_t job_limit = resolve_job_limit(options.jobs, paths.size());
-    // counting_semaphore requires a compile-time-ish max; use a large bound and acquire down to job_limit.
-    std::counting_semaphore<> slots{static_cast<std::ptrdiff_t>(job_limit)};
-
-    for (const auto &path : paths)
+    const bool single_plain = paths.size() == 1 && !is_stdio_path(paths[0]) && !path_is_compressed_input(paths[0]);
+    std::uint64_t file_size = 0;
+    std::size_t split_workers = 1;
+    if (single_plain)
     {
-        futures.emplace_back(std::async(std::launch::async,
-                                        [&options, path, &total_words, &slots]() -> std::pair<std::vector<std::string>, bool>
-                                        {
-                                            slots.acquire();
-                                            std::vector<std::string> local_task_words;
-                                            const bool success =
-                                                process_file(path, local_task_words, total_words, options);
-                                            slots.release();
-                                            return {std::move(local_task_words), success};
-                                        }));
+        std::error_code ec;
+        if (fs::is_regular_file(paths[0], ec))
+        {
+            file_size = static_cast<std::uint64_t>(fs::file_size(paths[0], ec));
+            if (!ec)
+                split_workers = resolve_split_workers(options.jobs, file_size);
+        }
+    }
+
+    if (single_plain && split_workers > 1 && file_size > 0)
+    {
+        futures.reserve(split_workers);
+        const std::size_t job_limit = split_workers;
+        std::counting_semaphore<> slots{static_cast<std::ptrdiff_t>(job_limit)};
+        for (std::size_t i = 0; i < split_workers; ++i)
+        {
+            const std::uint64_t begin = (file_size * i) / split_workers;
+            const std::uint64_t end = (file_size * (i + 1)) / split_workers;
+            const auto range = std::optional<std::pair<std::uint64_t, std::uint64_t>>{{begin, end}};
+            futures.emplace_back(std::async(
+                std::launch::async,
+                [&options, path = paths[0], &total_words, &slots, range]() -> std::pair<std::vector<std::string>, bool> {
+                    slots.acquire();
+                    std::vector<std::string> local_task_words;
+                    const bool success = process_file(path, local_task_words, total_words, options, &range);
+                    slots.release();
+                    return {std::move(local_task_words), success};
+                }));
+        }
+    }
+    else
+    {
+        futures.reserve(paths.size());
+
+        const std::size_t job_limit = resolve_job_limit(options.jobs, paths.size());
+        // counting_semaphore requires a compile-time-ish max; use a large bound and acquire down to job_limit.
+        std::counting_semaphore<> slots{static_cast<std::ptrdiff_t>(job_limit)};
+
+        for (const auto &path : paths)
+        {
+            futures.emplace_back(std::async(std::launch::async,
+                                            [&options, path, &total_words, &slots]() -> std::pair<std::vector<std::string>, bool>
+                                            {
+                                                slots.acquire();
+                                                std::vector<std::string> local_task_words;
+                                                const bool success =
+                                                    process_file(path, local_task_words, total_words, options);
+                                                slots.release();
+                                                return {std::move(local_task_words), success};
+                                            }));
+        }
     }
 
     bool all_tasks_successful = true;

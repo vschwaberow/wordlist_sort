@@ -62,7 +62,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--minlen <int>` | Filter out words shorter than N chars |
 | `--dup-sense <int>` | Remove word if any single char exceeds N% (0–100) |
 | `--cuda-threshold <int>` | Minimum word count before GPU sort/dedup (default: 10000000; `0` = auto ≈100k; requires `--cuda`) |
-| `--jobs <int>` | Parallel input workers: omit = auto (`hardware_concurrency`), `0` = unlimited, `>0` = cap |
+| `--jobs <int>` | Parallel workers; one plain input range-splits when jobs>1 |
 | `--sort-chunk <int>` | External CPU sort/dedup: max words per temp run (`0` = off; spills when the list is larger) |
 | `--limit <int>` | Stop ingest after N accepted survivors (`0` = unlimited; applies before sort/dedup) |
 | `--every <int>` | Keep every N-th accepted survivor (`0` = off; 0-based index) |

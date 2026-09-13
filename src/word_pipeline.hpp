@@ -7,6 +7,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <cstddef>
 #include <expected>
 #include <filesystem>
@@ -137,7 +138,9 @@ void trim_special_inplace(std::string &str) noexcept;
 [[nodiscard]] bool process_file(const std::filesystem::path &path,
                                 std::vector<std::string> &output_words,
                                 std::atomic<std::size_t> &total_words_processed_counter,
-                                const Options &options);
+                                const Options &options,
+                                const std::optional<std::pair<std::uint64_t, std::uint64_t>> *byte_range =
+                                    nullptr);
 
 [[nodiscard]] bool check_inputs_sorted(const std::vector<std::filesystem::path> &paths,
                                        bool null_separated,
