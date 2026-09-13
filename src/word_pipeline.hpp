@@ -47,6 +47,7 @@ struct Options
     bool no_numbers = false;
     bool hash_remove = false;
     bool email_sort = false;
+    bool email_split = false;
     bool dewebify = false;
     bool noutf8 = false;
     bool wordify = false;

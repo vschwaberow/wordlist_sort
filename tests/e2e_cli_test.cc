@@ -624,3 +624,17 @@ TEST(E2eCli, SampleSize)
             ++lines;
     EXPECT_EQ(lines, 3u) << out;
 }
+
+TEST(E2eCli, EmailSplit)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "user@example.com\nplain\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --email-split --sort " + shell_quote(output.string()) +
+                                                " " + shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(output), "example.com\nplain\nuser\n");
+}

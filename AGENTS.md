@@ -105,6 +105,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **Compressed text output**: writing `--format=text` to a `.gz` / `.zst` (`.zstd`) / `.xz` / `.lz4` path compresses with zlib / libzstd / liblzma / liblz4. `--append` adds another member/frame/stream. Binary formats reject compressed outputs.
 - **`-` means stdio**: input `-` reads stdin (at most once); output `-` writes `--format=text` to stdout and forces quiet. Non-text formats refuse stdout.
 - **`--noutf8`** strips bytes `>127` on every input line (independent of `--dewebify`).
+- **`--email-split`**: valid emails emit username and domain as two survivors; mutually exclusive with `--email-sort`.
 - **`--upper`**: uppercase each survivor; if both `--lower` and `--upper` are set, `--upper` wins.
 - **`--reverse`**: reverse character order within each survivor (after case transforms).
 - **`--prefix` / `--suffix`**: keep survivors that start/end with the given string (after transforms; empty = off).
