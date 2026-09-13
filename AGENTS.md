@@ -105,7 +105,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **`--deduplicate` silently forces a sort** even without `--sort`, and prints a note to stdout. Dedup requires sorted input (`std::unique` only removes *consecutive* duplicates).
 - **Threading is one `std::async` task per input file**, gated by `--jobs` (default: `hardware_concurrency` via counting semaphore; `0` = unlimited). Each task streams its file line-by-line.
 - **`--jobs`**: omit = auto CPU count (default), `0` unlimited, `>0` cap.
-- **`--sort-chunk N`**: when `N>0` (CPU path), flush sorted temp runs during ingest every `N` words, then k-way merge (`ExternalSortBuilder`).
+- **`--sort-chunk N`**: when `N>0` (CPU path), flush sorted temp runs during ingest every `N` words, then k-way merge (`ExternalSortBuilder`); text format merges directly to the output stream.
 - **`--cuda` / `--no-cuda` / `--cuda-threshold`**: GPU sort/dedup (compile-time optional via `-DWORDLIST_SORT_CUDA=ON`). See gotcha §6.
 - **`--exclude` / `--intersect` / `--filter-engine`**: build/open B filter first, then stream A with early drop; text B uses `hash|fst|pthash`; WLTRIE1/`*.cdb` opened as in-memory indexes (`open_membership_filter`).
 - **`--format text|cdb|fst|pthash`**: output encoder after sort/dedup (`cdb` = DJB CDB, `fst` = WLTRIE1, `pthash` = WLPTH1 MPHF+keys). Duplicate keys keep the first occurrence.

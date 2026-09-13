@@ -6,6 +6,7 @@
 #include "test_helpers.hpp"
 
 #include <gtest/gtest.h>
+#include <sstream>
 #include <vector>
 
 namespace
@@ -211,4 +212,25 @@ TEST(SortDedup, ExternalSortBuilderIngest)
     sort_and_deduplicate_words(expected, SortDedupOptions{.sort = true, .deduplicate = true});
     EXPECT_EQ(out, expected);
     EXPECT_EQ(builder.pushed(), 46u);
+}
+
+TEST(SortDedup, ExternalSortBuilderFinishToStream)
+{
+    ExternalSortBuilder builder(make_sort_dedup_plan(true, true), 4);
+    for (int i = 0; i < 20; ++i)
+        builder.push("k" + std::to_string(i % 5));
+
+    std::ostringstream oss;
+    const auto n = builder.finish_to_stream(oss);
+
+    std::vector<std::string> expected;
+    for (int i = 0; i < 20; ++i)
+        expected.push_back("k" + std::to_string(i % 5));
+    sort_and_deduplicate_words(expected, SortDedupOptions{.sort = true, .deduplicate = true});
+
+    std::ostringstream expect_oss;
+    for (const auto &w : expected)
+        expect_oss << w << '\n';
+    EXPECT_EQ(n, expected.size());
+    EXPECT_EQ(oss.str(), expect_oss.str());
 }

@@ -115,7 +115,7 @@ Build a membership index from FILE B **first**, then **stream** input files (A) 
 
 When `--format=text` is used **without** `--sort`/`--deduplicate`, survivors are written directly to the output file during ingest (no in-memory word buffer). Sort/dedup and binary formats (`cdb`/`fst`/`pthash`) still buffer survivors.
 
-With `--sort-chunk N` (and `--sort` and/or `--deduplicate`, without `--cuda`), words are flushed to sorted temp runs **during ingest** every `N` survivors, then k-way merged — peak RAM stays near one chunk plus the membership filter.
+With `--sort-chunk N` (and `--sort` and/or `--deduplicate`, without `--cuda`), words are flushed to sorted temp runs **during ingest** every `N` survivors, then k-way merged. For `--format=text`, the merge writes straight to the output file (no full survivor buffer after merge).
 
 B may be a plain text wordlist **or** a previously exported index:
 - `WLTRIE1` (`.fst` from `--format=fst`) — detected by magic; `--filter-engine` ignored
