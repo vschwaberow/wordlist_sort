@@ -93,6 +93,8 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--hash-remove` | Discard hex hashes (≥32 hex chars) |
 | `--email-sort` | Convert `user@domain.com` → `user domain` |
 | `--email-split` | Emit username and domain as two separate words |
+| `--field N` | Keep only 1-based field N from each line (0=off) |
+| `--delimiter D` | Delimiter for `--field` (default TAB; first char, or `\\t` / `,`) |
 | `--dewebify` | Strip HTML tags |
 | `--noutf8` | Keep only ASCII (0–127); applied per input line |
 | `--sort` | Sort output lexicographically |

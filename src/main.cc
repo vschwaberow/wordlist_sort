@@ -112,6 +112,7 @@ constexpr std::array int_opt_specs{
     IntOptSpec{"--limit", &Options::limit, "Stop ingest after N accepted survivors (0=unlimited)"},
     IntOptSpec{"--every", &Options::every_n, "Keep every N-th accepted survivor (0=off; 0-based)"},
     IntOptSpec{"--sample", &Options::sample_n, "Reservoir-sample N accepted survivors (0=off)"},
+    IntOptSpec{"--field", &Options::field, "Select 1-based field from each line before transforms (0=off)"},
 };
 
 constexpr std::array str_opt_specs{
@@ -125,6 +126,7 @@ constexpr std::array str_opt_specs{
     StrOptSpec{"--prefix", &Options::prefix, "Keep only words that start with PREFIX"},
     StrOptSpec{"--suffix", &Options::suffix, "Keep only words that end with SUFFIX"},
     StrOptSpec{"--regex", &Options::regex_pattern, "Keep only words matching ECMAScript regex"},
+    StrOptSpec{"--delimiter", &Options::delimiter, "Field delimiter for --field (default TAB; first char, or \\t / ,)"},
 };
 
 constexpr std::size_t compute_help_col_width()

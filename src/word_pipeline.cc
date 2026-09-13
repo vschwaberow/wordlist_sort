@@ -17,6 +17,7 @@
 #include <iostream>
 #include <future>
 #include <memory>
+#include <optional>
 #include <mutex>
 #include <semaphore>
 #include <thread>
@@ -123,6 +124,43 @@ void trim_special_inplace(std::string &str) noexcept
     if (at_pos == std::string_view::npos)
         return {std::string{email}, ""};
     return {std::string{email.substr(0, at_pos)}, std::string{email.substr(at_pos + 1)}};
+}
+
+[[nodiscard]] char field_delimiter_char(const std::string_view delim) noexcept
+{
+    if (delim.empty())
+        return '\t';
+    if (delim == "\\t" || delim == "\t")
+        return '\t';
+    if (delim == ",")
+        return ',';
+    return delim.front();
+}
+
+/// Extract 1-based field; nullopt if the field is missing.
+[[nodiscard]] std::optional<std::string_view> extract_field(const std::string_view line,
+                                                            const int field,
+                                                            const char delim) noexcept
+{
+    if (field <= 0)
+        return line;
+
+    int index = 1;
+    std::size_t start = 0;
+    while (true)
+    {
+        const auto pos = line.find(delim, start);
+        if (index == field)
+        {
+            if (pos == std::string_view::npos)
+                return line.substr(start);
+            return line.substr(start, pos - start);
+        }
+        if (pos == std::string_view::npos)
+            return std::nullopt;
+        start = pos + 1;
+        ++index;
+    }
 }
 
 [[nodiscard]] std::optional<std::string> process_word(const std::string_view word, const Options &options)
@@ -386,6 +424,15 @@ void trim_special_inplace(std::string &str) noexcept
 
         if (options.noutf8)
             std::erase_if(line_str, [](const unsigned char c) { return c > 127; });
+
+        if (options.field > 0)
+        {
+            const char delim = field_delimiter_char(options.delimiter);
+            const auto field_view = extract_field(line_str, options.field, delim);
+            if (!field_view)
+                continue;
+            line_str.assign(*field_view);
+        }
 
         if (options.wordify)
         {

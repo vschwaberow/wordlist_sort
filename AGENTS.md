@@ -106,6 +106,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **`-` means stdio**: input `-` reads stdin (at most once); output `-` writes `--format=text` to stdout and forces quiet. Non-text formats refuse stdout.
 - **`--noutf8`** strips bytes `>127` on every input line (independent of `--dewebify`).
 - **`--email-split`**: valid emails emit username and domain as two survivors; mutually exclusive with `--email-sort`.
+- **`--field N` / `--delimiter D`**: before wordify/transforms, keep only 1-based field N (`0` = off). Default delimiter is TAB; first character of D counts, or literal `\t` / `,`. Missing field drops the line.
 - **`--upper`**: uppercase each survivor; if both `--lower` and `--upper` are set, `--upper` wins.
 - **`--reverse`**: reverse character order within each survivor (after case transforms).
 - **`--prefix` / `--suffix`**: keep survivors that start/end with the given string (after transforms; empty = off).
