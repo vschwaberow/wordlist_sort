@@ -101,7 +101,7 @@ cmake --build build-cuda -j
 These are behaviors not clearly documented and easy to get wrong:
 
 - **Positional order defaults to OUTPUT first**, then inputs (`wordlist_sort <out> <in...>`). Prefer `-o`/`--output` so all positionals are inputs (`wordlist_sort -o out in1 in2`).
-- **Compressed inputs**: transparent inflate for `.gz` (zlib) and `.zst`/`.zstd` (libzstd) on ingest and text `--exclude`/`--intersect` sources (`WORDLIST_SORT_ZLIB` / `WORDLIST_SORT_ZSTD`, default ON). Detected by extension or magic; stdin stays raw.
+- **Compressed inputs**: transparent inflate for `.gz` (zlib), `.zst`/`.zstd` (libzstd), and `.xz` (liblzma) on ingest and text `--exclude`/`--intersect` sources (`WORDLIST_SORT_ZLIB` / `WORDLIST_SORT_ZSTD` / `WORDLIST_SORT_LZMA`, default ON). Detected by extension or magic; stdin stays raw.
 - **`-` means stdio**: input `-` reads stdin (at most once); output `-` writes `--format=text` to stdout and forces quiet. Non-text formats refuse stdout.
 - **`--noutf8`** strips bytes `>127` on every input line (independent of `--dewebify`).
 - **`-0` / `--null`**: NUL-separated text I/O for ingest and `--format=text` output (external-sort merge included). Rejected for binary formats. Internal spill runs stay newline-based.

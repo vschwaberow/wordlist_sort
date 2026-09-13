@@ -48,6 +48,7 @@ option(WORDLIST_SORT_NATIVE_ARCH "Add -march=native on GCC/Clang (non-portable)"
 option(WORDLIST_SORT_PTHASH "Enable PTHash membership engine for --exclude/--intersect" ON)
 option(WORDLIST_SORT_ZLIB "Enable transparent gzip (.gz) input via zlib" ON)
 option(WORDLIST_SORT_ZSTD "Enable transparent zstd (.zst) input via libzstd" ON)
+option(WORDLIST_SORT_LZMA "Enable transparent xz (.xz) input via liblzma" ON)
 
 set(WORDLIST_SORT_CORE_SOURCES
     src/word_pipeline.cc
@@ -84,6 +85,12 @@ if(WORDLIST_SORT_ZSTD)
         target_link_libraries(wordlist_sort PRIVATE ${WORDLIST_SORT_ZSTD_LIB})
     endif()
     target_compile_definitions(wordlist_sort PRIVATE WORDLIST_SORT_ZSTD=1)
+endif()
+
+if(WORDLIST_SORT_LZMA)
+    find_package(LibLZMA REQUIRED)
+    target_link_libraries(wordlist_sort PRIVATE LibLZMA::LibLZMA)
+    target_compile_definitions(wordlist_sort PRIVATE WORDLIST_SORT_LZMA=1)
 endif()
 
 if(WORDLIST_SORT_PTHASH)
