@@ -43,6 +43,7 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 option(WORDLIST_SORT_CUDA "Enable CUDA-accelerated sort/dedup" OFF)
 option(WORDLIST_SORT_BUILD_TESTS "Build GoogleTest suite and register CTest targets" ON)
+option(WORDLIST_SORT_BUILD_BENCHMARKS "Build sort/dedup CPU baseline benchmark harness" ON)
 
 set(WORD_SORTER_CORE_SOURCES
     src/word_pipeline.cc
@@ -86,4 +87,8 @@ if(WORDLIST_SORT_BUILD_TESTS)
 
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(WORDLIST_SORT_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
 endif()

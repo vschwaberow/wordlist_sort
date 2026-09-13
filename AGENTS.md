@@ -46,6 +46,22 @@ Tests use **GoogleTest + CTest** (`tests/`, enabled via `WORDLIST_SORT_BUILD_TES
 
 CUDA tests call `GTEST_SKIP()` when no GPU is available. Shell wrappers `build_and_test*.sh` are CTest fixtures with label `integration`.
 
+
+## Benchmarks (P0 CPU baseline)
+
+Build and run the sort/dedup harness (synthetic wordlists; measures sort, isolated unique/erase, and sort+dedup total):
+
+```bash
+cmake -B build -DWORDLIST_SORT_BUILD_BENCHMARKS=ON
+cmake --build build -j --target sort_dedup_bench
+./build/benchmarks/sort_dedup_bench --sizes 100000,1000000 --iters 3
+# or
+./run_benchmark.sh --sizes 100000,1000000 --csv
+```
+
+Optional CUDA comparison (requires `-DWORDLIST_SORT_CUDA=ON`): pass `--cuda` to the harness / `WORDLIST_SORT_CUDA=ON ./run_benchmark.sh --cuda`.
+Use median timings across sizes to calibrate `--cuda-threshold` (default 10_000_000).
+
 ## Critical Gotchas (README vs. Reality)
 
 The README is partially out of date / inaccurate. Trust the code, not the README, when they disagree.
