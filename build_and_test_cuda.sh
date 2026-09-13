@@ -28,14 +28,14 @@ EXPECTED=$'apple\nbanana\ncherry\n'
 
 echo "==> Test: CPU fallback (threshold not reached)"
 "${BINARY}" --sort --deduplicate "${WORK}/out_cpu.txt" "${WORK}/in.txt"
-if [[ "$(cat "${WORK}/out_cpu.txt}")" != "${EXPECTED}" ]]; then
+if [[ "$(cat "${WORK}/out_cpu.txt")" != "${EXPECTED}" ]]; then
   echo "FAIL: CPU fallback output mismatch"
   exit 1
 fi
 
 echo "==> Test: CUDA sort + deduplicate (--cuda-threshold 1)"
 "${BINARY}" --sort --deduplicate --cuda --cuda-threshold 1 "${WORK}/out_cuda.txt" "${WORK}/in.txt"
-if [[ "$(cat "${WORK}/out_cuda.txt}")" != "${EXPECTED}" ]]; then
+if [[ "$(cat "${WORK}/out_cuda.txt")" != "${EXPECTED}" ]]; then
   echo "FAIL: CUDA output mismatch"
   cat "${WORK}/out_cuda.txt"
   exit 1
@@ -54,7 +54,7 @@ if ! grep -q 'Deduplication requires sorting' <<< "${OUTPUT}"; then
   echo "FAIL: missing implicit-sort note on stdout"
   exit 1
 fi
-if [[ "$(cat "${WORK}/out_dedup.txt}")" != "${EXPECTED}" ]]; then
+if [[ "$(cat "${WORK}/out_dedup.txt")" != "${EXPECTED}" ]]; then
   echo "FAIL: CUDA deduplicate-only output mismatch"
   exit 1
 fi
