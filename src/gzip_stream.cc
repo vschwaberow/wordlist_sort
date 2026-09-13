@@ -7,7 +7,9 @@
 #include "gzip_stream.hpp"
 #include "io_buffer.hpp"
 
+#include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
@@ -313,6 +315,139 @@ bool ZstdInputStream::is_open() const noexcept
 {
     return buf_ && buf_->ok();
 }
+
+
+class ZstdOutputStream::Buf final : public std::streambuf
+{
+  public:
+    Buf(const std::filesystem::path &path, const bool append)
+        : file_(std::fopen(path.string().c_str(), append ? "ab" : "wb")),
+          cstream_(ZSTD_createCStream()),
+          out_storage_(ZSTD_CStreamOutSize())
+    {
+        if (file_ == nullptr || cstream_ == nullptr)
+        {
+            close_all();
+            return;
+        }
+        if (ZSTD_isError(ZSTD_initCStream(cstream_, 3)))
+        {
+            close_all();
+            return;
+        }
+        setp(in_storage_.data(), in_storage_.data() + in_storage_.size());
+        ok_ = true;
+    }
+
+    ~Buf() override { close_all(); }
+
+    [[nodiscard]] bool ok() const noexcept { return ok_; }
+
+  protected:
+    int_type overflow(int_type ch) override
+    {
+        if (!compress_pending(ZSTD_e_continue))
+            return traits_type::eof();
+        if (traits_type::eq_int_type(ch, traits_type::eof()))
+            return traits_type::not_eof(ch);
+        *pptr() = traits_type::to_char_type(ch);
+        pbump(1);
+        return ch;
+    }
+
+    std::streamsize xsputn(const char *s, std::streamsize n) override
+    {
+        if (!ok_ || n <= 0)
+            return 0;
+        std::streamsize done = 0;
+        while (done < n)
+        {
+            const auto space = epptr() - pptr();
+            if (space == 0)
+            {
+                if (!compress_pending(ZSTD_e_continue))
+                    return done;
+                continue;
+            }
+            const auto chunk = std::min<std::streamsize>(n - done, space);
+            std::memcpy(pptr(), s + done, static_cast<std::size_t>(chunk));
+            pbump(static_cast<int>(chunk));
+            done += chunk;
+        }
+        return done;
+    }
+
+    int sync() override
+    {
+        return compress_pending(ZSTD_e_flush) ? 0 : -1;
+    }
+
+  private:
+    [[nodiscard]] bool compress_pending(const ZSTD_EndDirective end_op)
+    {
+        if (!ok_)
+            return false;
+        const auto pending = static_cast<std::size_t>(pptr() - pbase());
+        ZSTD_inBuffer input{pbase(), pending, 0};
+        std::size_t remaining = 1;
+        while (input.pos < input.size || (end_op != ZSTD_e_continue && remaining != 0))
+        {
+            ZSTD_outBuffer output{out_storage_.data(), out_storage_.size(), 0};
+            remaining = ZSTD_compressStream2(cstream_, &output, &input, end_op);
+            if (ZSTD_isError(remaining))
+                return false;
+            if (output.pos > 0)
+            {
+                if (std::fwrite(out_storage_.data(), 1, output.pos, file_) != output.pos)
+                    return false;
+            }
+            if (end_op == ZSTD_e_continue && input.pos >= input.size)
+                break;
+        }
+        if (pending > 0)
+            pbump(-static_cast<int>(pending));
+        return true;
+    }
+
+    void close_all()
+    {
+        if (ok_ && cstream_ != nullptr && file_ != nullptr)
+            static_cast<void>(compress_pending(ZSTD_e_end));
+        if (cstream_ != nullptr)
+        {
+            ZSTD_freeCStream(cstream_);
+            cstream_ = nullptr;
+        }
+        if (file_ != nullptr)
+        {
+            std::fclose(file_);
+            file_ = nullptr;
+        }
+        ok_ = false;
+    }
+
+    FILE *file_ = nullptr;
+    ZSTD_CStream *cstream_ = nullptr;
+    std::vector<char> in_storage_ = std::vector<char>(1 << 16);
+    std::vector<char> out_storage_;
+    bool ok_ = false;
+};
+
+ZstdOutputStream::ZstdOutputStream(const std::filesystem::path &path, const bool append)
+    : std::ostream(nullptr), buf_(std::make_unique<Buf>(path, append))
+{
+    rdbuf(buf_.get());
+    if (!buf_->ok())
+        setstate(std::ios::failbit);
+}
+
+ZstdOutputStream::~ZstdOutputStream() = default;
+
+bool ZstdOutputStream::is_open() const noexcept
+{
+    return buf_ && buf_->ok();
+}
+
 
 #endif
 
@@ -714,6 +849,24 @@ enum class CompressionKind
 #else
         if (error_out)
             *error_out = "gzip output requires a build with zlib (WORDLIST_SORT_ZLIB)";
+        return nullptr;
+#endif
+    }
+
+    if (path_looks_zstd(path))
+    {
+#if defined(WORDLIST_SORT_ZSTD)
+        auto zs = std::make_unique<ZstdOutputStream>(path, append);
+        if (!zs->is_open())
+        {
+            if (error_out)
+                *error_out = "Unable to open zstd output file: " + path.string();
+            return nullptr;
+        }
+        return zs;
+#else
+        if (error_out)
+            *error_out = "zstd output requires a build with libzstd (WORDLIST_SORT_ZSTD)";
         return nullptr;
 #endif
     }

@@ -267,6 +267,28 @@ TEST(E2eCli, GzipTextOutput)
 #endif
 }
 
+TEST(E2eCli, ZstdTextOutput)
+{
+#if !defined(WORDLIST_SORT_ZSTD)
+    GTEST_SKIP() << "built without libzstd";
+#else
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path zst_out = work / "out.txt.zst";
+    const fs::path plain_out = work / "out.txt";
+    test_helpers::write_text_file(input, "c\na\nb\na\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --sort --deduplicate " + shell_quote(zst_out.string()) +
+                                                " " + shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0);
+
+    const int z = std::system(("zstd -q -d -f " + shell_quote(zst_out.string()) + " -o " + shell_quote(plain_out.string())).c_str());
+    ASSERT_EQ(z, 0);
+    EXPECT_EQ(test_helpers::read_text_file(plain_out), "a\nb\nc\n");
+#endif
+}
+
 TEST(E2eCli, ZstdInput)
 {
 #if !defined(WORDLIST_SORT_ZSTD)
