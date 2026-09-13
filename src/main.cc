@@ -5,6 +5,7 @@
 // Copyright (c) 2026 Volker Schwaberow
 
 #include "export_format.hpp"
+#include "gzip_stream.hpp"
 #include "membership_filter.hpp"
 #include "sort_dedup.hpp"
 #include "word_pipeline.hpp"
@@ -401,6 +402,11 @@ int main(const int argc, char *argv[])
         std::println(stderr, "Error: --null is only supported with --format=text");
         return 1;
     }
+    if (*format != ExportFormat::Text && path_looks_gzip(args.output_path))
+    {
+        std::println(stderr, "Error: gzip output (.gz) is only supported with --format=text");
+        return 1;
+    }
 
     const std::size_t stdin_inputs = static_cast<std::size_t>(std::count_if(
         args.input_paths.begin(), args.input_paths.end(),
@@ -442,7 +448,7 @@ int main(const int argc, char *argv[])
     std::vector<std::string> words;
     args.options.survivor_count = &survivors;
     std::mutex stream_mutex;
-    std::ofstream stream_file;
+    std::unique_ptr<std::ostream> stream_out_owned;
     std::optional<ExternalSortBuilder> external_builder;
 
     if (stream_text)
@@ -453,15 +459,17 @@ int main(const int argc, char *argv[])
         }
         else
         {
-            const auto stream_mode =
-                std::ios::binary | (args.options.append ? std::ios::app : std::ios::trunc);
-            stream_file.open(args.output_path, stream_mode);
-            if (!stream_file)
+            std::string open_error;
+            stream_out_owned = open_text_output_stream(args.output_path, args.options.append, &open_error);
+            if (!stream_out_owned)
             {
-                std::println(stderr, "Error: Failed to open output file for writing: {}", args.output_path.string());
+                std::println(stderr, "Error: {}", open_error.empty()
+                                                     ? std::format("Failed to open output file for writing: {}",
+                                                                   args.output_path.string())
+                                                     : open_error);
                 return 1;
             }
-            args.options.stream_out = &stream_file;
+            args.options.stream_out = stream_out_owned.get();
         }
         args.options.stream_mutex = &stream_mutex;
         args.options.stream_emitted = &survivors;
@@ -554,18 +562,21 @@ int main(const int argc, char *argv[])
             }
             else
             {
-                const auto out_mode =
-                    std::ios::binary | (args.options.append ? std::ios::app : std::ios::trunc);
-                std::ofstream out_file(args.output_path, out_mode);
+                std::string open_error;
+                auto out_file = open_text_output_stream(args.output_path, args.options.append, &open_error);
                 if (!out_file)
                 {
-                    std::println(stderr, "Error: Failed to open output file for writing: {}", args.output_path.string());
+                    std::println(stderr, "Error: {}", open_error.empty()
+                                                         ? std::format("Failed to open output file for writing: {}",
+                                                                       args.output_path.string())
+                                                         : open_error);
                     return 1;
                 }
-                external_streamed = external_builder->finish_to_stream(out_file, args.options.null_separated ? '\0' : '\n');
+                external_streamed =
+                    external_builder->finish_to_stream(*out_file, args.options.null_separated ? '\0' : '\n');
                 args.options.external_sort = nullptr;
-                out_file.flush();
-                if (!out_file)
+                out_file->flush();
+                if (!*out_file)
                 {
                     std::println(stderr, "Error: Failed while writing external-sort output: {}", args.output_path.string());
                     return 1;
@@ -616,8 +627,8 @@ int main(const int argc, char *argv[])
         }
         else
         {
-            stream_file.flush();
-            if (!stream_file)
+            stream_out_owned->flush();
+            if (!*stream_out_owned)
             {
                 std::println(stderr, "Error: Failed while writing streamed output: {}", args.output_path.string());
                 return 1;

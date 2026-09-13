@@ -111,6 +111,98 @@ bool GzipInputStream::is_open() const noexcept
     return buf_ && buf_->ok();
 }
 
+
+class GzipOutputStream::Buf final : public std::streambuf
+{
+  public:
+    Buf(const std::filesystem::path &path, const bool append)
+        : file_(gzopen(path.string().c_str(), append ? "ab" : "wb"))
+    {
+        if (file_ != nullptr)
+            setp(buffer_.data(), buffer_.data() + buffer_.size());
+    }
+
+    ~Buf() override { close_all(); }
+
+    [[nodiscard]] bool ok() const noexcept { return file_ != nullptr; }
+
+  protected:
+    int_type overflow(int_type ch) override
+    {
+        if (!flush_buffer())
+            return traits_type::eof();
+        if (traits_type::eq_int_type(ch, traits_type::eof()))
+            return traits_type::not_eof(ch);
+        const char c = traits_type::to_char_type(ch);
+        if (gzwrite(file_, &c, 1) != 1)
+            return traits_type::eof();
+        return ch;
+    }
+
+    std::streamsize xsputn(const char *s, std::streamsize n) override
+    {
+        if (file_ == nullptr || n <= 0)
+            return 0;
+        if (!flush_buffer())
+            return 0;
+        const int wrote = gzwrite(file_, s, static_cast<unsigned>(n));
+        return wrote > 0 ? static_cast<std::streamsize>(wrote) : 0;
+    }
+
+    int sync() override
+    {
+        if (!flush_buffer())
+            return -1;
+        if (file_ == nullptr)
+            return -1;
+        return gzflush(file_, Z_SYNC_FLUSH) == Z_OK ? 0 : -1;
+    }
+
+  private:
+    [[nodiscard]] bool flush_buffer()
+    {
+        if (file_ == nullptr)
+            return false;
+        const auto pending = pptr() - pbase();
+        if (pending > 0)
+        {
+            const int wrote = gzwrite(file_, pbase(), static_cast<unsigned>(pending));
+            if (wrote != static_cast<int>(pending))
+                return false;
+            pbump(static_cast<int>(-pending));
+        }
+        return true;
+    }
+
+    void close_all()
+    {
+        if (file_ == nullptr)
+            return;
+        static_cast<void>(flush_buffer());
+        gzclose(file_);
+        file_ = nullptr;
+    }
+
+    gzFile file_ = nullptr;
+    std::vector<char> buffer_ = std::vector<char>(1 << 16);
+};
+
+GzipOutputStream::GzipOutputStream(const std::filesystem::path &path, const bool append)
+    : std::ostream(nullptr), buf_(std::make_unique<Buf>(path, append))
+{
+    rdbuf(buf_.get());
+    if (!buf_->ok())
+        setstate(std::ios::failbit);
+}
+
+GzipOutputStream::~GzipOutputStream() = default;
+
+bool GzipOutputStream::is_open() const noexcept
+{
+    return buf_ && buf_->ok();
+}
+
+
 #endif
 
 #if defined(WORDLIST_SORT_ZSTD)
@@ -602,4 +694,37 @@ enum class CompressionKind
     if (error_out)
         *error_out = "Unable to open file: " + path.string();
     return nullptr;
+}
+
+[[nodiscard]] std::unique_ptr<std::ostream> open_text_output_stream(const std::filesystem::path &path,
+                                                                    const bool append,
+                                                                    std::string *error_out)
+{
+    if (path_looks_gzip(path))
+    {
+#if defined(WORDLIST_SORT_ZLIB)
+        auto gz = std::make_unique<GzipOutputStream>(path, append);
+        if (!gz->is_open())
+        {
+            if (error_out)
+                *error_out = "Unable to open gzip output file: " + path.string();
+            return nullptr;
+        }
+        return gz;
+#else
+        if (error_out)
+            *error_out = "gzip output requires a build with zlib (WORDLIST_SORT_ZLIB)";
+        return nullptr;
+#endif
+    }
+
+    const auto mode = std::ios::binary | (append ? std::ios::app : std::ios::trunc);
+    auto file = std::make_unique<std::ofstream>(path, mode);
+    if (!*file)
+    {
+        if (error_out)
+            *error_out = "Unable to open output file: " + path.string();
+        return nullptr;
+    }
+    return file;
 }
