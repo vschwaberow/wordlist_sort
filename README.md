@@ -41,6 +41,8 @@ cmake --build build-cuda -j
 ```bash
 ./build/wordlist_sort [OPTIONS] <output> <input> [input ...]
 ./build/wordlist_sort [OPTIONS] -o <output> <input> [input ...]
+./build/wordlist_sort index [OPTIONS] <index-out> <input> [input ...]
+./build/wordlist_sort query [OPTIONS] [-o <out>] <index> <query-input> [query-input ...]
 ```
 
 By default the first positional is the **output** file, followed by one or more **inputs**. With `-o`/`--output`, all positionals are inputs.
@@ -122,6 +124,22 @@ Without a CUDA build, `--cuda` prints a note and uses the CPU path. If a CUDA ru
 GPU transfers use **pinned host memory**. Before launching, the tool checks free VRAM against a conservative working-set estimate. If the full list does not fit, it switches to a **chunked out-of-core** GPU path (sort each VRAM-sized chunk, then k-way merge on the host). `--cuda-threshold 0` selects an auto minimum (~100k words) instead of the 10M default.
 
 
+
+
+## Index & Query
+
+Build a reusable membership index, then probe queries without re-sorting a full wordlist pipeline:
+
+```bash
+./wordlist_sort index dict.fst words.txt          # implies sort+dedup; format from .fst
+./wordlist_sort query dict.fst queries.txt        # hits to stdout
+./wordlist_sort query --miss -o miss.txt dict.fst queries.txt
+./wordlist_sort query --fuzzy --distance 1 dict.fst typos.txt
+```
+
+`index` writes only the index file (cdb / fst / pthash). `query` loads the index via the same path as `--lookup` and treats query files as inputs. Default query output is stdout (`-`); use `-o` for a file. `--miss` emits non-hits. `query` is mutually exclusive with `--exclude` / `--intersect` / `--lookup`.
+
+Without a subcommand the classic form remains: `wordlist_sort [opts] <output> <input...>`.
 
 ## Set filters (`--exclude` / `--intersect`)
 
@@ -229,6 +247,10 @@ CUDA builds add `sort_dedup_cuda_test` (label `cuda`). Convenience wrappers:
 ```
 
 ## Release notes
+
+### v0.5.0
+
+- `index` / `query` subcommands for index-first workflows
 
 ### v0.4.0
 

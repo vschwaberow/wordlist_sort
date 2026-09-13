@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <expected>
 #include <filesystem>
 #include <string>
@@ -23,6 +24,9 @@ enum class ExportFormat
 };
 
 [[nodiscard]] std::expected<ExportFormat, std::string> parse_export_format(std::string_view text);
+
+/// Infer cdb/fst/pthash from path extension (.cdb / .fst / .pthash / .wlp); empty if unknown.
+[[nodiscard]] std::optional<ExportFormat> infer_export_format_from_path(const std::filesystem::path &path);
 
 [[nodiscard]] const char *export_format_name(ExportFormat format) noexcept;
 

@@ -7,6 +7,7 @@
 #include "export_format.hpp"
 
 #include <format>
+#include <optional>
 
 #include "word_pipeline.hpp"
 
@@ -21,6 +22,23 @@
     if (text == "pthash" || text == "mphf")
         return ExportFormat::Pthash;
     return std::unexpected(std::format("Unknown --format '{}' (expected text|cdb|fst|pthash)", text));
+}
+
+[[nodiscard]] std::optional<ExportFormat> infer_export_format_from_path(const std::filesystem::path &path)
+{
+    std::string ext = path.extension().string();
+    for (char &c : ext)
+    {
+        if (c >= 'A' && c <= 'Z')
+            c = static_cast<char>(c - 'A' + 'a');
+    }
+    if (ext == ".cdb")
+        return ExportFormat::Cdb;
+    if (ext == ".fst")
+        return ExportFormat::Fst;
+    if (ext == ".pthash" || ext == ".wlp")
+        return ExportFormat::Pthash;
+    return std::nullopt;
 }
 
 [[nodiscard]] const char *export_format_name(const ExportFormat format) noexcept

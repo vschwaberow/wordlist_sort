@@ -64,6 +64,7 @@ struct Options
     bool ignore_case = false;
     bool recursive = false;
     bool fuzzy = false;
+    bool miss = false;
     bool force = false;
     bool skip_comments = false;
     bool append = false;
@@ -91,6 +92,8 @@ struct Options
     std::string exclude_path;
     std::string intersect_path;
     std::string lookup_path;
+    /// Set by `query` subcommand (index path); empty in other modes.
+    std::string query_index_path;
     std::string filter_engine = "hash";
     std::string output_override;
     const MembershipFilter *membership = nullptr;
