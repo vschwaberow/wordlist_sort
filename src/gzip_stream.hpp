@@ -145,13 +145,35 @@ class ZstdOutputStream final : public std::ostream
 
 #endif
 
+
+#if defined(WORDLIST_SORT_LZMA)
+
+/// Compressing output stream over an xz file (liblzma easy encoder).
+class XzOutputStream final : public std::ostream
+{
+  public:
+    XzOutputStream(const std::filesystem::path &path, bool append);
+    ~XzOutputStream() override;
+
+    XzOutputStream(const XzOutputStream &) = delete;
+    XzOutputStream &operator=(const XzOutputStream &) = delete;
+
+    [[nodiscard]] bool is_open() const noexcept;
+
+  private:
+    class Buf;
+    std::unique_ptr<Buf> buf_;
+};
+
+#endif
+
 /// Open a path as a line-oriented input stream. Owns the stream.
 /// Optional transparent inflate for gzip / zstd / xz / lz4 (extension or magic).
 [[nodiscard]] std::unique_ptr<std::istream> open_input_stream(const std::filesystem::path &path,
                                                               std::string *error_out);
 
-/// Open a text output stream. Transparent gzip (`.gz`) / zstd (`.zst`/`.zstd`).
-/// `append` adds another compressed member/frame where supported.
+/// Open a text output stream. Transparent gzip / zstd / xz when extension matches.
+/// `append` adds another compressed member/frame/stream where supported.
 [[nodiscard]] std::unique_ptr<std::ostream> open_text_output_stream(const std::filesystem::path &path,
                                                                    bool append,
                                                                    std::string *error_out);
