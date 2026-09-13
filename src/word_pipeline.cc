@@ -395,12 +395,33 @@ void trim_special_inplace(std::string &str) noexcept
                                       std::views::filter([](auto &&chunk)
                                                          { return !chunk.empty() && !is_space_char(chunk.front()); }))
             {
-                try_add_word(std::string(word_chunk.begin(), word_chunk.end()));
+                const std::string chunk_word(word_chunk.begin(), word_chunk.end());
+                if (options.email_split && is_valid_email(chunk_word))
+                {
+                    const auto [username, domain] = split_email(chunk_word);
+                    try_add_word(username);
+                    if (!domain.empty())
+                        try_add_word(domain);
+                }
+                else
+                {
+                    try_add_word(chunk_word);
+                }
             }
         }
         else
         {
-            try_add_word(line_str);
+            if (options.email_split && is_valid_email(line_str))
+            {
+                const auto [username, domain] = split_email(line_str);
+                try_add_word(username);
+                if (!domain.empty())
+                    try_add_word(domain);
+            }
+            else
+            {
+                try_add_word(line_str);
+            }
         }
     }
 
