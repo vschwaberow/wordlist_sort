@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(word_sorter LANGUAGES CXX)
+project(wordlist_sort LANGUAGES CXX)
 
 set(PROJECT_NAME "wordlist_sort")
 set(PROJECT_VERSION "0.3.0")
@@ -44,37 +44,46 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 option(WORDLIST_SORT_CUDA "Enable CUDA-accelerated sort/dedup" OFF)
 option(WORDLIST_SORT_BUILD_TESTS "Build GoogleTest suite and register CTest targets" ON)
 option(WORDLIST_SORT_BUILD_BENCHMARKS "Build sort/dedup CPU baseline benchmark harness" ON)
+option(WORDLIST_SORT_NATIVE_ARCH "Add -march=native on GCC/Clang (non-portable)" OFF)
 
-set(WORD_SORTER_CORE_SOURCES
+set(WORDLIST_SORT_CORE_SOURCES
     src/word_pipeline.cc
     src/sort_dedup_cpu.cc)
 
-add_executable(word_sorter
+add_executable(wordlist_sort
     src/main.cc
-    ${WORD_SORTER_CORE_SOURCES})
+    ${WORDLIST_SORT_CORE_SOURCES})
 
-target_include_directories(word_sorter PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(wordlist_sort PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if(WORDLIST_SORT_CUDA)
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
-    set(WORD_SORTER_CUDA_SOURCES
+    set(WORDLIST_SORT_CUDA_SOURCES
         src/sort_dedup_cuda.cu
         src/cuda_available.cc)
-    target_sources(word_sorter PRIVATE ${WORD_SORTER_CUDA_SOURCES})
-    target_link_libraries(word_sorter PRIVATE CUDA::cudart)
-    target_compile_definitions(word_sorter PRIVATE WORDLIST_SORT_CUDA=1)
-    set_target_properties(word_sorter PROPERTIES
+    target_sources(wordlist_sort PRIVATE ${WORDLIST_SORT_CUDA_SOURCES})
+    target_link_libraries(wordlist_sort PRIVATE CUDA::cudart)
+    target_compile_definitions(wordlist_sort PRIVATE WORDLIST_SORT_CUDA=1)
+    set_target_properties(wordlist_sort PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
         CUDA_ARCHITECTURES native)
 else()
-    target_sources(word_sorter PRIVATE src/sort_dedup_cuda_stub.cc)
+    target_sources(wordlist_sort PRIVATE src/sort_dedup_cuda_stub.cc)
 endif()
 
-target_compile_options(word_sorter PRIVATE
-    $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror -O3 -march=native>)
-target_compile_options(word_sorter PRIVATE
-    $<$<COMPILE_LANGUAGE:CUDA>:-O3 --expt-extended-lambda>)
+# Warnings always; optimization only in Release; MSVC gets /W4 and /O2.
+target_compile_options(wordlist_sort PRIVATE
+    $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-Wall;-Wextra;-Wpedantic;-Wconversion;-Wshadow;-Werror>
+    $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CXX_COMPILER_ID:MSVC>>:/W4;/permissive->
+    $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:Release>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-O3>
+    $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<CONFIG:Release>,$<CXX_COMPILER_ID:MSVC>>:/O2>
+    $<$<COMPILE_LANGUAGE:CUDA>:-O3;--expt-extended-lambda>)
+
+if(WORDLIST_SORT_NATIVE_ARCH)
+    target_compile_options(wordlist_sort PRIVATE
+        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-march=native>)
+endif()
 
 if(WORDLIST_SORT_BUILD_TESTS)
     include(FetchContent)

@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${ROOT}/build-cuda"
-BINARY="${BUILD_DIR}/word_sorter"
+BINARY="${BUILD_DIR}/wordlist_sort"
 
 echo "==> Configure (CUDA)"
 cmake -B "${BUILD_DIR}" \

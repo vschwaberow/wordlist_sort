@@ -1,4 +1,4 @@
-function(word_sorter_add_cxx_test target)
+function(wordlist_sort_add_cxx_test target)
     add_executable(${target} ${ARGN})
     target_include_directories(${target} PRIVATE
         ${CMAKE_SOURCE_DIR}/src
@@ -9,24 +9,24 @@ function(word_sorter_add_cxx_test target)
     add_test(NAME ${target} COMMAND ${target})
 endfunction()
 
-set(WORD_SORTER_SORT_DEDUP_CPU ${CMAKE_SOURCE_DIR}/src/sort_dedup_cpu.cc)
-set(WORD_SORTER_PIPELINE ${CMAKE_SOURCE_DIR}/src/word_pipeline.cc)
+set(WORDLIST_SORT_SORT_DEDUP_CPU ${CMAKE_SOURCE_DIR}/src/sort_dedup_cpu.cc)
+set(WORDLIST_SORT_PIPELINE ${CMAKE_SOURCE_DIR}/src/word_pipeline.cc)
 
-word_sorter_add_cxx_test(sort_dedup_test
+wordlist_sort_add_cxx_test(sort_dedup_test
     sort_dedup_test.cc
-    ${WORD_SORTER_SORT_DEDUP_CPU}
+    ${WORDLIST_SORT_SORT_DEDUP_CPU}
     ${CMAKE_SOURCE_DIR}/src/sort_dedup_cuda_stub.cc)
 
-word_sorter_add_cxx_test(word_pipeline_test
+wordlist_sort_add_cxx_test(word_pipeline_test
     word_pipeline_test.cc
-    ${WORD_SORTER_PIPELINE})
+    ${WORDLIST_SORT_PIPELINE})
 
-word_sorter_add_cxx_test(e2e_cli_test
+wordlist_sort_add_cxx_test(e2e_cli_test
     e2e_cli_test.cc)
 
 target_compile_definitions(e2e_cli_test PRIVATE
-    WORD_SORTER_EXE="$<TARGET_FILE:word_sorter>")
-add_dependencies(e2e_cli_test word_sorter)
+    WORDLIST_SORT_EXE="$<TARGET_FILE:wordlist_sort>")
+add_dependencies(e2e_cli_test wordlist_sort)
 
 if(WORDLIST_SORT_CUDA)
     target_compile_definitions(sort_dedup_test PRIVATE WORDLIST_SORT_CUDA=1)
@@ -34,7 +34,7 @@ if(WORDLIST_SORT_CUDA)
 
     add_executable(sort_dedup_cuda_test
         sort_dedup_cuda_test.cc
-        ${WORD_SORTER_SORT_DEDUP_CPU}
+        ${WORDLIST_SORT_SORT_DEDUP_CPU}
         ${CMAKE_SOURCE_DIR}/src/sort_dedup_cuda.cu
         ${CMAKE_SOURCE_DIR}/src/cuda_available.cc)
     target_include_directories(sort_dedup_cuda_test PRIVATE
