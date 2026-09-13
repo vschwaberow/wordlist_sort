@@ -37,6 +37,7 @@ struct Options
     bool deduplicate = false;
     bool cuda = false;
     bool no_cuda = false;
+    bool cuda_timing = false;
     int cuda_threshold = 10'000'000;
 };
 

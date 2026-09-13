@@ -134,3 +134,21 @@ TEST(SortDedupDispatch, ThresholdUsesCpuPath)
                                         });
     EXPECT_EQ(words, sorted_unique_words());
 }
+
+TEST(CudaThreshold, AutoResolvesToHeuristicMin)
+{
+    EXPECT_EQ(resolve_cuda_word_threshold(0), kCudaHeuristicMinWords);
+}
+
+TEST(CudaThreshold, ExplicitValuePreserved)
+{
+    EXPECT_EQ(resolve_cuda_word_threshold(1'000'000), 1'000'000);
+}
+
+TEST(CudaThreshold, EstimateDeviceBytesScales)
+{
+    const std::size_t small = estimate_cuda_device_bytes(1'000, 8'000);
+    const std::size_t large = estimate_cuda_device_bytes(2'000, 16'000);
+    EXPECT_GT(large, small);
+}
+
