@@ -46,7 +46,7 @@ option(WORDLIST_SORT_BUILD_TESTS "Build GoogleTest suite and register CTest targ
 option(WORDLIST_SORT_BUILD_BENCHMARKS "Build sort/dedup CPU baseline benchmark harness" ON)
 option(WORDLIST_SORT_NATIVE_ARCH "Add -march=native on GCC/Clang (non-portable)" OFF)
 option(WORDLIST_SORT_PTHASH "Enable PTHash membership engine for --exclude/--intersect" ON)
-option(WORDLIST_SORT_ZLIB "Enable transparent gzip (.gz) input via zlib" ON)
+option(WORDLIST_SORT_ZLIB "Enable transparent gzip (.gz) input/output via zlib" ON)
 option(WORDLIST_SORT_ZSTD "Enable transparent zstd (.zst) input via libzstd" ON)
 option(WORDLIST_SORT_LZMA "Enable transparent xz (.xz) input via liblzma" ON)
 option(WORDLIST_SORT_LZ4 "Enable transparent lz4 (.lz4) input via liblz4" ON)

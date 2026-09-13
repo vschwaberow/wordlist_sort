@@ -211,12 +211,14 @@ void trim_special_inplace(std::string &str) noexcept
         return {};
     }
 
-    const auto mode = std::ios::binary | (append ? std::ios::app : std::ios::trunc);
-    std::ofstream out(path, mode);
+    std::string open_error;
+    auto out = open_text_output_stream(path, append, &open_error);
     if (!out)
-        return std::unexpected(std::format("Failed to open output file for writing: {}", path.string()));
+        return std::unexpected(open_error.empty()
+                                   ? std::format("Failed to open output file for writing: {}", path.string())
+                                   : open_error);
 
-    BufferedRecordWriter writer(out, sep);
+    BufferedRecordWriter writer(*out, sep);
     for (const auto &word : words)
         writer.write(word);
     if (!writer.flush() || !writer.good())

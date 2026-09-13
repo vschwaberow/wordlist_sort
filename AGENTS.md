@@ -102,6 +102,7 @@ These are behaviors not clearly documented and easy to get wrong:
 
 - **Positional order defaults to OUTPUT first**, then inputs (`wordlist_sort <out> <in...>`). Prefer `-o`/`--output` so all positionals are inputs (`wordlist_sort -o out in1 in2`).
 - **Compressed inputs**: transparent inflate for `.gz` (zlib), `.zst`/`.zstd` (libzstd), `.xz` (liblzma), and `.lz4` (liblz4) on ingest and text `--exclude`/`--intersect` sources (`WORDLIST_SORT_ZLIB` / `WORDLIST_SORT_ZSTD` / `WORDLIST_SORT_LZMA` / `WORDLIST_SORT_LZ4`, default ON). Detected by extension or magic; stdin stays raw.
+- **Compressed text output**: writing `--format=text` to a `.gz` path compresses with zlib (`GzipOutputStream`). `--append` uses gzip multi-member append. Binary formats reject `.gz` outputs.
 - **`-` means stdio**: input `-` reads stdin (at most once); output `-` writes `--format=text` to stdout and forces quiet. Non-text formats refuse stdout.
 - **`--noutf8`** strips bytes `>127` on every input line (independent of `--dewebify`).
 - **`-0` / `--null`**: NUL-separated text I/O for ingest and `--format=text` output (external-sort merge included). Rejected for binary formats. Internal spill runs stay newline-based.
