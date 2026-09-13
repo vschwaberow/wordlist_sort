@@ -20,7 +20,7 @@ inline std::string read_text_file(const std::filesystem::path &path)
 
 inline std::filesystem::path make_temp_dir()
 {
-    const auto base = std::filesystem::temp_directory_path() / "word_sorter_test";
+    const auto base = std::filesystem::temp_directory_path() / "wordlist_sort_test";
     std::filesystem::create_directories(base);
     return base / std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 }
@@ -56,8 +56,8 @@ struct CommandResult
 
 inline CommandResult run_command(const std::string &command)
 {
-    const auto stdout_path = std::filesystem::temp_directory_path() / "word_sorter_stdout.txt";
-    const auto stderr_path = std::filesystem::temp_directory_path() / "word_sorter_stderr.txt";
+    const auto stdout_path = std::filesystem::temp_directory_path() / "wordlist_sort_stdout.txt";
+    const auto stderr_path = std::filesystem::temp_directory_path() / "wordlist_sort_stderr.txt";
     const std::string wrapped =
         command + " >" + stdout_path.string() + " 2>" + stderr_path.string();
     CommandResult result;

@@ -4,7 +4,7 @@ A C++26 CLI tool to process, filter, and sort wordlists. Processes multiple inpu
 
 ## Requirements
 
-- **C++26** compiler (GCC 16+, Clang, or MSVC)
+- **C++26** toolchain (`CMAKE_CXX_STANDARD 26`; GCC 16+, recent Clang, or MSVC with C++26 support)
 - CMake 3.18+
 - Optional: NVIDIA CUDA Toolkit (only for `-DWORDLIST_SORT_CUDA=ON`)
 
@@ -13,11 +13,19 @@ A C++26 CLI tool to process, filter, and sort wordlists. Processes multiple inpu
 ```bash
 git clone https://github.com/vschwaberow/wordlist_sort.git
 cd wordlist_sort
-cmake -B build
+cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
-The binary is `build/word_sorter`. The default build needs no external dependencies and no CUDA toolkit.
+The binary is `build/wordlist_sort` (same name as the project / version banner). The default build needs no external dependencies and no CUDA toolkit.
+
+Release builds use `-O3` (GCC/Clang) or `/O2` (MSVC). Host-CPU tuning is **opt-in**:
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DWORDLIST_SORT_NATIVE_ARCH=ON
+```
+
+`-DWORDLIST_SORT_NATIVE_ARCH=ON` adds `-march=native` on GCC/Clang (non-portable; rebuild per machine). It has no effect on MSVC.
 
 ### Optional CUDA build
 
@@ -31,7 +39,7 @@ cmake --build build-cuda -j
 ## Usage
 
 ```bash
-./build/word_sorter [OPTIONS] <output> <input> [input ...]
+./build/wordlist_sort [OPTIONS] <output> <input> [input ...]
 ```
 
 The first positional is the **output** file, followed by one or more **input** files.
@@ -78,7 +86,7 @@ GPU transfers use **pinned host memory**. Before launching, the tool checks free
 ## Example
 
 ```bash
-./build/word_sorter --maxlen 10 --sort --detab sorted.txt list1.txt list2.txt list3.txt
+./build/wordlist_sort --maxlen 10 --sort --detab sorted.txt list1.txt list2.txt list3.txt
 ```
 
 Filters words over 10 chars, removes leading tabs/spaces, sorts, writes to `sorted.txt`.
@@ -86,14 +94,14 @@ Filters words over 10 chars, removes leading tabs/spaces, sorts, writes to `sort
 CUDA example (CUDA build required):
 
 ```bash
-./build-cuda/word_sorter --sort --deduplicate --cuda --cuda-threshold 1000000 out.txt big1.txt big2.txt
+./build-cuda/wordlist_sort --sort --deduplicate --cuda --cuda-threshold 1000000 out.txt big1.txt big2.txt
 ```
 
 ## Performance
 
 - **Parallel:** each input file processed in its own `std::async` task
-- **Bulk I/O:** files read fully into memory (no `mmap`)
-- **Dedup:** `sort` + `unique` (not a hash set)
+- **Bulk I/O:** each input file is read fully into a `std::vector<char>` (no `mmap` / memory-mapped I/O)
+- **Dedup:** `--deduplicate` uses `std::ranges::sort` + `std::unique` + erase (not `unordered_set`)
 - **Ranges:** lazy transforms via `std::ranges`
 - **Move semantics:** per-task results moved into output without copying
 - **CUDA (optional):** sort/dedup on GPU above `--cuda-threshold`; calibrate with the benchmark harness
