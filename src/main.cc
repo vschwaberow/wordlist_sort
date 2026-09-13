@@ -79,6 +79,8 @@ constexpr std::array flag_specs{
     FlagSpec{"--cuda",         &Options::cuda,         "Use GPU for sort/dedup when built with CUDA and word count exceeds threshold"},
     FlagSpec{"--no-cuda",      &Options::no_cuda,      "Force CPU sort/dedup even when CUDA is available"},
     FlagSpec{"--cuda-timing",  &Options::cuda_timing,  "Print CUDA phase timings (H2D/sort/dedup/D2H) to stderr"},
+    FlagSpec{"--quiet",        &Options::quiet,        "Suppress informational stdout (errors/warnings still print)"},
+    FlagSpec{"-q",             &Options::quiet,        "Short form of --quiet"},
 };
 
 constexpr std::array int_opt_specs{
@@ -294,13 +296,18 @@ int main(const int argc, char *argv[])
 
     if (args.options.deduplicate && !args.options.sort)
     {
-        std::println(stderr, "Note: --deduplicate implies --sort (global dedup requires a sorted pass).");
+        if (!args.options.quiet)
+            std::println(stderr, "Note: --deduplicate implies --sort (global dedup requires a sorted pass).");
         args.options.sort = true;
     }
 
-    std::println("{} version {} by {} ({} {} {})", PROGRAM_NAME, PROGRAM_VERSION, PROGRAM_AUTHOR, BUILD_DATE,
-                 BUILD_TIME, BUILD_PLATFORM);
-    std::println("{}\n", PROGRAM_COPYRIGHT);
+    if (!args.options.quiet)
+    {
+        std::println("{} version {} by {} ({} {} {})", PROGRAM_NAME, PROGRAM_VERSION, PROGRAM_AUTHOR, BUILD_DATE,
+                     BUILD_TIME, BUILD_PLATFORM);
+        std::println("{}", PROGRAM_COPYRIGHT);
+        std::println();
+    }
 
     if (!args.options.exclude_path.empty() && !args.options.intersect_path.empty())
     {
@@ -333,9 +340,10 @@ int main(const int argc, char *argv[])
         membership_filter = std::move(*filter);
         args.options.membership = membership_filter.get();
         args.options.membership_exclude = !args.options.exclude_path.empty();
-        std::println("Built {} filter via {} ({} keys); streaming inputs with early drop.",
-                     args.options.membership_exclude ? "exclude" : "intersect",
-                     membership_filter->backend_name(), membership_filter->size());
+        if (!args.options.quiet)
+            std::println("Built {} filter via {} ({} keys); streaming inputs with early drop.",
+                         args.options.membership_exclude ? "exclude" : "intersect",
+                         membership_filter->backend_name(), membership_filter->size());
     }
 
     const auto format = parse_export_format(args.options.format);
@@ -369,14 +377,17 @@ int main(const int argc, char *argv[])
         args.options.stream_out = &stream_file;
         args.options.stream_mutex = &stream_mutex;
         args.options.stream_emitted = &streamed_words;
-        std::println("Streaming text output (no in-memory word buffer).");
+        if (!args.options.quiet)
+            std::println("Streaming text output (no in-memory word buffer).");
     }
     else if (external_ingest)
     {
         const auto plan = make_sort_dedup_plan(args.options.sort, args.options.deduplicate);
-        external_builder.emplace(plan, static_cast<std::size_t>(args.options.sort_chunk));
+        external_builder.emplace(plan, static_cast<std::size_t>(args.options.sort_chunk),
+                                  args.options.quiet);
         args.options.external_sort = &(*external_builder);
-        std::println("External sort ingest flush enabled (chunk={}).", args.options.sort_chunk);
+        if (!args.options.quiet)
+            std::println("External sort ingest flush enabled (chunk={}).", args.options.sort_chunk);
     }
 
     if (!process_multiple_files_parallel(args.input_paths, words, total_words_processed, args.options))
@@ -387,7 +398,8 @@ int main(const int argc, char *argv[])
         const std::size_t remain = stream_text ? streamed_words.load()
                                  : external_ingest ? external_builder->pushed()
                                                    : words.size();
-        std::println("Applied membership filter during ingest → {} words remain.", remain);
+        if (!args.options.quiet)
+            std::println("Applied membership filter during ingest → {} words remain.", remain);
     }
 
     std::size_t external_streamed = 0;
@@ -454,8 +466,9 @@ int main(const int argc, char *argv[])
     const std::size_t out_count = stream_text ? streamed_words.load()
                                 : (external_ingest && *format == ExportFormat::Text) ? external_streamed
                                                                                       : words.size();
-    std::println("Processed {} words from input files, resulting in {} words in the output list, in {} ms.",
-                 total_words_processed.load(), out_count, duration.count());
+    if (!args.options.quiet)
+        std::println("Processed {} words from input files, resulting in {} words in the output list, in {} ms.",
+                     total_words_processed.load(), out_count, duration.count());
 
     return 0;
 }
