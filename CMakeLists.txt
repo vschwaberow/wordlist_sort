@@ -47,6 +47,7 @@ option(WORDLIST_SORT_BUILD_BENCHMARKS "Build sort/dedup CPU baseline benchmark h
 option(WORDLIST_SORT_NATIVE_ARCH "Add -march=native on GCC/Clang (non-portable)" OFF)
 option(WORDLIST_SORT_PTHASH "Enable PTHash membership engine for --exclude/--intersect" ON)
 option(WORDLIST_SORT_ZLIB "Enable transparent gzip (.gz) input via zlib" ON)
+option(WORDLIST_SORT_ZSTD "Enable transparent zstd (.zst) input via libzstd" ON)
 
 set(WORDLIST_SORT_CORE_SOURCES
     src/word_pipeline.cc
@@ -67,6 +68,22 @@ if(WORDLIST_SORT_ZLIB)
     find_package(ZLIB REQUIRED)
     target_link_libraries(wordlist_sort PRIVATE ZLIB::ZLIB)
     target_compile_definitions(wordlist_sort PRIVATE WORDLIST_SORT_ZLIB=1)
+endif()
+
+if(WORDLIST_SORT_ZSTD)
+    find_package(zstd REQUIRED)
+    # CMake configs vary: prefer namespaced target when present.
+    if(TARGET zstd::libzstd_shared)
+        target_link_libraries(wordlist_sort PRIVATE zstd::libzstd_shared)
+    elseif(TARGET zstd::libzstd_static)
+        target_link_libraries(wordlist_sort PRIVATE zstd::libzstd_static)
+    elseif(TARGET zstd::libzstd)
+        target_link_libraries(wordlist_sort PRIVATE zstd::libzstd)
+    else()
+        find_library(WORDLIST_SORT_ZSTD_LIB zstd REQUIRED)
+        target_link_libraries(wordlist_sort PRIVATE ${WORDLIST_SORT_ZSTD_LIB})
+    endif()
+    target_compile_definitions(wordlist_sort PRIVATE WORDLIST_SORT_ZSTD=1)
 endif()
 
 if(WORDLIST_SORT_PTHASH)
