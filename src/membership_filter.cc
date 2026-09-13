@@ -80,6 +80,12 @@ public:
     [[nodiscard]] std::size_t size() const noexcept override { return size_; }
     [[nodiscard]] const char *backend_name() const noexcept override { return "fst"; }
 
+    [[nodiscard]] std::expected<std::vector<std::string>, std::string>
+    fuzzy_search(const std::string_view query, const int max_distance) const override
+    {
+        return fst_fuzzy_search_bytes(data_, query, max_distance);
+    }
+
 private:
     std::vector<unsigned char> data_;
     std::size_t size_ = 0;

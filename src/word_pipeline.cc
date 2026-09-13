@@ -352,6 +352,71 @@ void trim_special_inplace(std::string &str) noexcept
             return;
 
         total_words_processed_counter++;
+
+        const auto emit_one = [&](std::string word) {
+            if (!accept_survivor())
+                return false;
+
+            if (options.every_n > 0 && options.every_counter != nullptr)
+            {
+                const std::size_t i = options.every_counter->fetch_add(1, std::memory_order_relaxed);
+                if ((i % static_cast<std::size_t>(options.every_n)) != 0)
+                    return true;
+            }
+
+            if (options.sample != nullptr && options.sample->capacity > 0)
+            {
+                const std::size_t i = options.sample->seen.fetch_add(1, std::memory_order_relaxed);
+                std::lock_guard<std::mutex> lock(options.sample->mutex);
+                if (i < options.sample->capacity)
+                {
+                    options.sample->reservoir.push_back(std::move(word));
+                }
+                else
+                {
+                    thread_local std::mt19937_64 rng{std::random_device{}()};
+                    std::uniform_int_distribution<std::size_t> dist(0, i);
+                    const std::size_t j = dist(rng);
+                    if (j < options.sample->capacity)
+                        options.sample->reservoir[j] = std::move(word);
+                }
+                return true;
+            }
+
+            if (stream_writer != nullptr)
+            {
+                stream_writer->write(word);
+                if (options.stream_emitted != nullptr && options.stream_emitted != options.survivor_count)
+                    options.stream_emitted->fetch_add(1, std::memory_order_relaxed);
+                return true;
+            }
+            if (options.external_sort != nullptr)
+            {
+                options.external_sort->push(std::move(word));
+                return true;
+            }
+            output_words.push_back(std::move(word));
+            return true;
+        };
+
+        if (options.fuzzy && options.membership != nullptr)
+        {
+            const auto matches = options.membership->fuzzy_search(*processed, options.distance);
+            if (!matches)
+            {
+                std::println(stderr, "Error: {}", matches.error());
+                return;
+            }
+            for (const auto &match : *matches)
+            {
+                if (limit_reached())
+                    break;
+                if (!emit_one(match))
+                    break;
+            }
+            return;
+        }
+
         if (options.membership != nullptr)
         {
             const bool hit = options.membership->contains(*processed);
@@ -359,50 +424,7 @@ void trim_special_inplace(std::string &str) noexcept
             if (drop)
                 return;
         }
-        if (!accept_survivor())
-            return;
-
-        if (options.every_n > 0 && options.every_counter != nullptr)
-        {
-            const std::size_t i = options.every_counter->fetch_add(1, std::memory_order_relaxed);
-            if ((i % static_cast<std::size_t>(options.every_n)) != 0)
-                return;
-        }
-
-        if (options.sample != nullptr && options.sample->capacity > 0)
-        {
-            const std::size_t i = options.sample->seen.fetch_add(1, std::memory_order_relaxed);
-            std::lock_guard<std::mutex> lock(options.sample->mutex);
-            if (i < options.sample->capacity)
-            {
-                options.sample->reservoir.push_back(std::move(*processed));
-            }
-            else
-            {
-                // Reservoir sampling: replace with probability capacity/(i+1).
-                thread_local std::mt19937_64 rng{std::random_device{}()};
-                std::uniform_int_distribution<std::size_t> dist(0, i);
-                const std::size_t j = dist(rng);
-                if (j < options.sample->capacity)
-                    options.sample->reservoir[j] = std::move(*processed);
-            }
-            return;
-        }
-
-        if (stream_writer != nullptr)
-        {
-            stream_writer->write(*processed);
-            // stream_emitted aliases survivor_count when both are set; avoid double-count.
-            if (options.stream_emitted != nullptr && options.stream_emitted != options.survivor_count)
-                options.stream_emitted->fetch_add(1, std::memory_order_relaxed);
-            return;
-        }
-        if (options.external_sort != nullptr)
-        {
-            options.external_sort->push(std::move(*processed));
-            return;
-        }
-        output_words.push_back(std::move(*processed));
+        static_cast<void>(emit_one(std::move(*processed)));
     };
 
     BufferedRecordReader reader(*in, record_sep);

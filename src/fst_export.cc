@@ -12,6 +12,8 @@
 #include <format>
 #include <fstream>
 #include <memory>
+#include <queue>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -209,6 +211,129 @@ void write_u32_le(std::ostream &out, const std::uint32_t value)
     const unsigned char *np = data.data() + nodes_off + static_cast<std::size_t>(node) * 8;
     const std::uint32_t packed = read_u32_le(np);
     return (packed & 1u) != 0;
+}
+
+
+[[nodiscard]] std::expected<std::vector<std::string>, std::string>
+fst_fuzzy_search_bytes(const std::span<const unsigned char> data, const std::string_view query,
+                       const int max_distance)
+{
+    if (max_distance < 0 || max_distance > 3)
+        return std::unexpected("fuzzy --distance must be between 0 and 3");
+    if (data.size() < 20)
+        return std::unexpected("FST/trie file too small");
+    if (std::memcmp(data.data(), kMagic, 8) != 0)
+        return std::unexpected("Not a WLTRIE1 FST/trie file");
+
+    const std::uint32_t node_count = read_u32_le(data.data() + 12);
+    const std::uint32_t edge_count = read_u32_le(data.data() + 16);
+    const std::size_t nodes_off = 20;
+    const std::size_t edges_off = nodes_off + static_cast<std::size_t>(node_count) * 8;
+    if (edges_off + static_cast<std::size_t>(edge_count) * 5 > data.size())
+        return std::unexpected("FST/trie truncated");
+
+    if (max_distance == 0)
+    {
+        const auto hit = fst_contains_bytes(data, query);
+        if (!hit)
+            return std::unexpected(hit.error());
+        if (*hit)
+            return std::vector<std::string>{std::string{query}};
+        return std::vector<std::string>{};
+    }
+
+    struct State
+    {
+        std::uint32_t node = 0;
+        std::uint32_t qi = 0;
+        int edits = 0;
+        std::string path;
+    };
+
+    // Best edits seen for (node, qi); prune dominated states.
+    std::vector<std::vector<int>> best(node_count, std::vector<int>(query.size() + 1, max_distance + 1));
+    std::set<std::string> matches;
+    std::queue<State> q;
+    q.push(State{});
+    best[0][0] = 0;
+
+    const auto node_info = [&](const std::uint32_t node) -> std::pair<bool, std::pair<std::uint32_t, std::uint32_t>> {
+        const unsigned char *np = data.data() + nodes_off + static_cast<std::size_t>(node) * 8;
+        const std::uint32_t packed = read_u32_le(np);
+        const bool terminal = (packed & 1u) != 0;
+        const std::uint32_t edge_count_n = packed >> 1;
+        const std::uint32_t edge_start = read_u32_le(np + 4);
+        return {terminal, {edge_start, edge_count_n}};
+    };
+
+    while (!q.empty())
+    {
+        State cur = std::move(q.front());
+        q.pop();
+        if (cur.node >= node_count || cur.edits > max_distance)
+            continue;
+        if (cur.edits > best[cur.node][cur.qi])
+            continue;
+
+        const auto [terminal, edge_meta] = node_info(cur.node);
+        const auto edge_start = edge_meta.first;
+        const auto edge_count_n = edge_meta.second;
+
+        if (cur.qi == query.size() && terminal)
+            matches.insert(cur.path);
+
+        const auto try_enqueue = [&](State next) {
+            if (next.edits > max_distance || next.node >= node_count)
+                return;
+            if (next.qi > query.size())
+                return;
+            int &slot = best[next.node][next.qi];
+            if (next.edits >= slot)
+                return;
+            slot = next.edits;
+            q.push(std::move(next));
+        };
+
+        // Deletion: consume query char without moving in trie.
+        if (cur.qi < query.size())
+        {
+            State del = cur;
+            ++del.qi;
+            ++del.edits;
+            try_enqueue(std::move(del));
+        }
+
+        for (std::uint32_t i = 0; i < edge_count_n; ++i)
+        {
+            const unsigned char *ep =
+                data.data() + edges_off + static_cast<std::size_t>(edge_start + i) * 5;
+            const unsigned char ch = ep[0];
+            const std::uint32_t target = read_u32_le(ep + 1);
+
+            // Insertion: take edge without consuming query.
+            {
+                State ins = cur;
+                ins.node = target;
+                ins.path.push_back(static_cast<char>(ch));
+                ++ins.edits;
+                try_enqueue(std::move(ins));
+            }
+
+            if (cur.qi < query.size())
+            {
+                const unsigned char qc = static_cast<unsigned char>(query[cur.qi]);
+                State nxt = cur;
+                nxt.node = target;
+                nxt.path.push_back(static_cast<char>(ch));
+                ++nxt.qi;
+                if (ch != qc)
+                    ++nxt.edits;
+                try_enqueue(std::move(nxt));
+            }
+        }
+    }
+
+    return std::vector<std::string>(matches.begin(), matches.end());
 }
 
 [[nodiscard]] std::expected<bool, std::string> fst_contains(const std::filesystem::path &path,

@@ -88,6 +88,7 @@ constexpr std::array flag_specs{
     FlagSpec{"--sort",         &Options::sort,         "Sort the output words lexicographically"},
     FlagSpec{"--ignore-case",  &Options::ignore_case,  "Case-insensitive sort/dedup/check-sorted (keep original form)"},
     FlagSpec{"--recursive",    &Options::recursive,    "Recurse into directory inputs for .txt and compressed wordlists"},
+    FlagSpec{"--fuzzy",        &Options::fuzzy,        "Fuzzy lookup via Levenshtein on FST (--lookup WLTRIE1 required)"},
     FlagSpec{"-r",             &Options::recursive,    "Short form of --recursive"},
     FlagSpec{"--deduplicate",  &Options::deduplicate,  "Remove duplicate words (implies --sort)"},
     FlagSpec{"--cuda",         &Options::cuda,         "Use GPU for sort/dedup when built with CUDA and word count exceeds threshold"},
@@ -118,6 +119,7 @@ constexpr std::array int_opt_specs{
     IntOptSpec{"--every", &Options::every_n, "Keep every N-th accepted survivor (0=off; 0-based)"},
     IntOptSpec{"--sample", &Options::sample_n, "Reservoir-sample N accepted survivors (0=off)"},
     IntOptSpec{"--field", &Options::field, "Select 1-based field from each line before transforms (0=off)"},
+    IntOptSpec{"--distance", &Options::distance, "Max edit distance for --fuzzy (0-3; default 1)"},
 };
 
 constexpr std::array str_opt_specs{
@@ -534,6 +536,26 @@ int main(const int argc, char *argv[])
                                                                                         : "intersect";
             std::println("Built {} filter via {} ({} keys); streaming inputs with early drop.", mode,
                          membership_filter->backend_name(), membership_filter->size());
+        }
+    }
+
+    if (args.options.fuzzy)
+    {
+        if (args.options.lookup_path.empty())
+        {
+            std::println(stderr, "Error: --fuzzy requires --lookup on a WLTRIE1 FST index");
+            return 1;
+        }
+        if (args.options.distance < 0 || args.options.distance > 3)
+        {
+            std::println(stderr, "Error: --distance must be between 0 and 3");
+            return 1;
+        }
+        if (!use_membership || membership_filter == nullptr ||
+            std::string_view{membership_filter->backend_name()} != "fst")
+        {
+            std::println(stderr, "Error: --fuzzy requires --lookup against a WLTRIE1 FST index");
+            return 1;
         }
     }
 

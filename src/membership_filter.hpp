@@ -30,6 +30,14 @@ public:
     [[nodiscard]] virtual bool contains(std::string_view key) const = 0;
     [[nodiscard]] virtual std::size_t size() const noexcept = 0;
     [[nodiscard]] virtual const char *backend_name() const noexcept = 0;
+    /// FST-only; other backends return an error.
+    [[nodiscard]] virtual std::expected<std::vector<std::string>, std::string>
+    fuzzy_search(std::string_view query, int max_distance) const
+    {
+        (void)query;
+        (void)max_distance;
+        return std::unexpected("fuzzy search requires an FST index (WLTRIE1 via --lookup)");
+    }
 };
 
 [[nodiscard]] std::expected<std::unique_ptr<MembershipFilter>, std::string>

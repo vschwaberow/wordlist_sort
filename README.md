@@ -76,6 +76,8 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--exclude <file>` | Drop words that occur in FILE (set difference A\\B) |
 | `--intersect <file>` | Keep only words that also occur in FILE (A∩B) |
 | `--lookup <index>` | Keep words present in INDEX (`.cdb`/`.fst`/`.pthash` or text+engine) |
+| `--fuzzy` | Fuzzy expand queries via Levenshtein on FST `--lookup` |
+| `--distance N` | Max edit distance for `--fuzzy` (0–3; default 1) |
 | `--filter-engine <str>` | Membership backend for exclude/intersect/lookup text indexes: `hash` (default), `fst`, `pthash` |
 
 ### Flags
