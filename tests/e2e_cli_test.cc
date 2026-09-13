@@ -281,3 +281,25 @@ TEST(E2eCli, LimitCapsSurvivors)
     EXPECT_EQ(test_helpers::read_text_file(output), "a\nb\n");
 }
 
+TEST(E2eCli, ForceRequiredToOverwrite)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "a\n");
+    test_helpers::write_text_file(output, "old\n");
+
+    const auto blocked = test_helpers::run_command(shell_quote(wordlist_sort_exe()) + " -q " +
+                                                   shell_quote(output.string()) + " " +
+                                                   shell_quote(input.string()));
+    EXPECT_NE(blocked.exit_code, 0);
+    EXPECT_NE(blocked.stderr_text.find("exists"), std::string::npos);
+    EXPECT_EQ(test_helpers::read_text_file(output), "old\n");
+
+    const auto forced = test_helpers::run_command(shell_quote(wordlist_sort_exe()) + " -q --force " +
+                                                  shell_quote(output.string()) + " " +
+                                                  shell_quote(input.string()));
+    EXPECT_EQ(forced.exit_code, 0);
+    EXPECT_EQ(test_helpers::read_text_file(output), "a\n");
+}
+
