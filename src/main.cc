@@ -14,8 +14,10 @@
 #include <charconv>
 #include <chrono>
 #include <memory>
+#include <mutex>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <format>
 #include <optional>
 #include <print>
@@ -315,27 +317,6 @@ int main(const int argc, char *argv[])
                      membership_filter->backend_name(), membership_filter->size());
     }
 
-    const auto start_time = std::chrono::high_resolution_clock::now();
-    std::atomic<std::size_t> total_words_processed{0};
-    std::vector<std::string> words;
-
-    if (!process_multiple_files_parallel(args.input_paths, words, total_words_processed, args.options))
-        std::println(stderr, "Warning: One or more files may have failed to process completely.");
-
-    if (use_membership)
-    {
-        std::println("Applied membership filter during ingest → {} words remain.", words.size());
-    }
-
-    sort_and_deduplicate_words(words, SortDedupOptions{
-                                           .sort = args.options.sort,
-                                           .deduplicate = args.options.deduplicate,
-                                           .use_cuda = args.options.cuda,
-                                           .no_cuda = args.options.no_cuda,
-                                           .cuda_timing = args.options.cuda_timing,
-                                           .cuda_threshold = static_cast<std::size_t>(args.options.cuda_threshold),
-                                       });
-
     const auto format = parse_export_format(args.options.format);
     if (!format)
     {
@@ -343,16 +324,70 @@ int main(const int argc, char *argv[])
         return 1;
     }
 
-    if (const auto write_result = write_export(words, args.output_path, *format); !write_result)
+    const bool stream_text = (*format == ExportFormat::Text) && !args.options.sort && !args.options.deduplicate;
+
+    const auto start_time = std::chrono::high_resolution_clock::now();
+    std::atomic<std::size_t> total_words_processed{0};
+    std::atomic<std::size_t> streamed_words{0};
+    std::vector<std::string> words;
+    std::mutex stream_mutex;
+    std::ofstream stream_file;
+
+    if (stream_text)
     {
-        std::println(stderr, "Error: {}", write_result.error());
-        return 1;
+        stream_file.open(args.output_path, std::ios::binary | std::ios::trunc);
+        if (!stream_file)
+        {
+            std::println(stderr, "Error: Failed to open output file for writing: {}", args.output_path.string());
+            return 1;
+        }
+        args.options.stream_out = &stream_file;
+        args.options.stream_mutex = &stream_mutex;
+        args.options.stream_emitted = &streamed_words;
+        std::println("Streaming text output (no in-memory word buffer).");
+    }
+
+    if (!process_multiple_files_parallel(args.input_paths, words, total_words_processed, args.options))
+        std::println(stderr, "Warning: One or more files may have failed to process completely.");
+
+    if (use_membership)
+    {
+        const std::size_t remain = stream_text ? streamed_words.load() : words.size();
+        std::println("Applied membership filter during ingest → {} words remain.", remain);
+    }
+
+    if (!stream_text)
+    {
+        sort_and_deduplicate_words(words, SortDedupOptions{
+                                               .sort = args.options.sort,
+                                               .deduplicate = args.options.deduplicate,
+                                               .use_cuda = args.options.cuda,
+                                               .no_cuda = args.options.no_cuda,
+                                               .cuda_timing = args.options.cuda_timing,
+                                               .cuda_threshold = static_cast<std::size_t>(args.options.cuda_threshold),
+                                           });
+
+        if (const auto write_result = write_export(words, args.output_path, *format); !write_result)
+        {
+            std::println(stderr, "Error: {}", write_result.error());
+            return 1;
+        }
+    }
+    else
+    {
+        stream_file.flush();
+        if (!stream_file)
+        {
+            std::println(stderr, "Error: Failed while writing streamed output: {}", args.output_path.string());
+            return 1;
+        }
     }
 
     const auto end_time = std::chrono::high_resolution_clock::now();
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    const std::size_t out_count = stream_text ? streamed_words.load() : words.size();
     std::println("Processed {} words from input files, resulting in {} words in the output list, in {} ms.",
-                 total_words_processed.load(), words.size(), duration.count());
+                 total_words_processed.load(), out_count, duration.count());
 
     return 0;
 }

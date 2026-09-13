@@ -111,7 +111,7 @@ These are behaviors not clearly documented and easy to get wrong:
 
 ## Architecture & Data Flow
 
-1. **`process_file`** — streams each input line via `std::getline` (no full-file buffer); optional membership gate drops during ingest.
+1. **`process_file`** — streams each input line via `std::getline` (no full-file buffer); optional membership gate drops during ingest; optional text stream sink writes survivors immediately.
 2. **`process_word`** — transform/filter pipeline (`strip_html_tags`, trims, dup-sense, email-sort, min/max len).
 3. **`process_multiple_files_parallel`** — one `std::async` task per input file.
 4. **`--exclude`/`--intersect`** — build membership from B before reading A (`membership_filter.*`).

@@ -7,6 +7,8 @@
 #include "word_pipeline.hpp"
 #include <atomic>
 #include <fstream>
+#include <sstream>
+#include <mutex>
 #include <filesystem>
 #include "test_helpers.hpp"
 
@@ -91,6 +93,39 @@ TEST(MembershipFilterTest, OpenExistingFstAndCdb)
     ASSERT_TRUE(cdb);
     EXPECT_TRUE((*cdb)->contains("alpha"));
     EXPECT_FALSE((*cdb)->contains("delta"));
+
+    std::filesystem::remove_all(dir);
+}
+
+TEST(MembershipFilterTest, StreamTextSinkSkipsBuffer)
+{
+    const auto dir = std::filesystem::temp_directory_path() / "wordlist_sort_stream_sink";
+    std::filesystem::create_directories(dir);
+    const auto input = dir / "a.txt";
+    {
+        std::ofstream out(input);
+        out << "a\nb\nc\n";
+    }
+
+    const auto filter = build_membership_filter({"b"}, FilterEngine::Hash);
+    ASSERT_TRUE(filter.has_value());
+
+    std::ostringstream sink;
+    std::mutex mu;
+    std::atomic<std::size_t> emitted{0};
+    Options options;
+    options.membership = filter->get();
+    options.membership_exclude = true;
+    options.stream_out = &sink;
+    options.stream_mutex = &mu;
+    options.stream_emitted = &emitted;
+
+    std::vector<std::string> words;
+    std::atomic<std::size_t> counter{0};
+    ASSERT_TRUE(process_file(input, words, counter, options));
+    EXPECT_TRUE(words.empty());
+    EXPECT_EQ(emitted.load(), 2u);
+    EXPECT_EQ(sink.str(), "a\nc\n");
 
     std::filesystem::remove_all(dir);
 }

@@ -12,6 +12,7 @@
 #include <format>
 #include <fstream>
 #include <future>
+#include <mutex>
 #include <print>
 #include <ranges>
 #include <span>
@@ -233,6 +234,21 @@ void trim_special_inplace(std::string &str) noexcept
             const bool drop = options.membership_exclude ? hit : !hit;
             if (drop)
                 return;
+        }
+        if (options.stream_out != nullptr)
+        {
+            if (options.stream_mutex != nullptr)
+            {
+                std::lock_guard<std::mutex> lock(*options.stream_mutex);
+                *options.stream_out << *processed << '\n';
+            }
+            else
+            {
+                *options.stream_out << *processed << '\n';
+            }
+            if (options.stream_emitted != nullptr)
+                options.stream_emitted->fetch_add(1, std::memory_order_relaxed);
+            return;
         }
         output_words.push_back(std::move(*processed));
     };
