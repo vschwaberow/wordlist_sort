@@ -111,6 +111,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **`-f` / `--force`**: required to overwrite an existing output path; stdout `-` is always allowed. Directories as output are always rejected.
 - **`--limit N`**: cap accepted survivors during ingest (`0` = off). Parallel-safe; stops reading further lines once full. Applies before sort/dedup (output may be smaller after dedup).
 - **`--progress`**: ingest ticker on stderr (works with `-q` / stdout `-`; does not write to stdout).
+- **`--stats`**: one final line on stderr with ingest/output counts and duration (works with `-q`).
 - **Ingest failure exits 1**: if any input file fails to open/read, the process exits non-zero (no silent partial success).
 - **`-q` / `--quiet`**: suppress banners and status lines on stdout (and non-fatal notes); errors/warnings stay on stderr.
 - **`--deduplicate` implies `--sort`**: if you pass `--deduplicate` alone, the CLI auto-enables `--sort` and prints a one-line note to stderr (global dedup needs a sorted pass).

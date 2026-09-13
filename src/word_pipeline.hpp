@@ -45,6 +45,7 @@ struct Options
     bool cuda_timing = false;
     bool quiet = false;
     bool progress = false;
+    bool stats = false;
     bool force = false;
     bool skip_comments = false;
     bool append = false;
