@@ -5,6 +5,7 @@
 // Copyright (c) 2026 Volker Schwaberow
 
 #include "gzip_stream.hpp"
+#include "io_buffer.hpp"
 
 #include <cctype>
 #include <cstdint>
@@ -471,59 +472,60 @@ enum class CompressionKind
     Lz4,
 };
 
-[[nodiscard]] CompressionKind detect_compression(const std::filesystem::path &path)
-{
-    const bool ext_gz = path_looks_gzip(path);
-    const bool ext_zst = path_looks_zstd(path);
-    const bool ext_xz = path_looks_xz(path);
-    const bool ext_lz4 = path_looks_lz4(path);
-
-    std::ifstream probe(path, std::ios::binary);
-    if (!probe)
-        return CompressionKind::None;
-
-    unsigned char magic[6]{};
-    probe.read(reinterpret_cast<char *>(magic), 6);
-    const auto n = probe.gcount();
-    probe.close();
-
-    const bool magic_gzip = n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b;
-    const bool magic_zstd =
-        n >= 4 && magic[0] == 0x28 && magic[1] == 0xb5 && magic[2] == 0x2f && magic[3] == 0xfd;
-    const bool magic_xz = n >= 6 && magic[0] == 0xfd && magic[1] == 0x37 && magic[2] == 0x7a &&
-                          magic[3] == 0x58 && magic[4] == 0x5a && magic[5] == 0x00;
-    // LZ4 frame magic 0x184D2204 (little-endian on disk).
-    const bool magic_lz4 =
-        n >= 4 && magic[0] == 0x04 && magic[1] == 0x22 && magic[2] == 0x4d && magic[3] == 0x18;
-
-    if (ext_gz || magic_gzip)
-        return CompressionKind::Gzip;
-    if (ext_zst || magic_zstd)
-        return CompressionKind::Zstd;
-    if (ext_xz || magic_xz)
-        return CompressionKind::Xz;
-    if (ext_lz4 || magic_lz4)
-        return CompressionKind::Lz4;
-    return CompressionKind::None;
-}
-
 } // namespace
 
 [[nodiscard]] std::unique_ptr<std::istream> open_input_stream(const std::filesystem::path &path,
                                                               std::string *error_out)
 {
-    // Probe existence first.
+    // Single open: peek magic on the same handle; reuse for plain files.
+    auto plain = std::make_unique<std::ifstream>(path, std::ios::binary);
+    if (!*plain)
     {
-        std::ifstream probe(path, std::ios::binary);
-        if (!probe)
-        {
-            if (error_out)
-                *error_out = "Unable to open file: " + path.string();
-            return nullptr;
-        }
+        if (error_out)
+            *error_out = "Unable to open file: " + path.string();
+        return nullptr;
     }
 
-    const CompressionKind kind = detect_compression(path);
+    unsigned char magic[6]{};
+    plain->read(reinterpret_cast<char *>(magic), 6);
+    const auto n = plain->gcount();
+
+    const bool ext_gz = path_looks_gzip(path);
+    const bool ext_zst = path_looks_zstd(path);
+    const bool ext_xz = path_looks_xz(path);
+    const bool ext_lz4 = path_looks_lz4(path);
+    const bool magic_gzip = n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b;
+    const bool magic_zstd =
+        n >= 4 && magic[0] == 0x28 && magic[1] == 0xb5 && magic[2] == 0x2f && magic[3] == 0xfd;
+    const bool magic_xz = n >= 6 && magic[0] == 0xfd && magic[1] == 0x37 && magic[2] == 0x7a &&
+                          magic[3] == 0x58 && magic[4] == 0x5a && magic[5] == 0x00;
+    const bool magic_lz4 =
+        n >= 4 && magic[0] == 0x04 && magic[1] == 0x22 && magic[2] == 0x4d && magic[3] == 0x18;
+
+    CompressionKind kind = CompressionKind::None;
+    if (ext_gz || magic_gzip)
+        kind = CompressionKind::Gzip;
+    else if (ext_zst || magic_zstd)
+        kind = CompressionKind::Zstd;
+    else if (ext_xz || magic_xz)
+        kind = CompressionKind::Xz;
+    else if (ext_lz4 || magic_lz4)
+        kind = CompressionKind::Lz4;
+
+    if (kind == CompressionKind::None)
+    {
+        plain->clear();
+        plain->seekg(0, std::ios::beg);
+        if (*plain)
+            return plain;
+
+        // Non-seekable (pipe / process substitution): replay peeked magic.
+        plain->clear();
+        std::string prefix(reinterpret_cast<const char *>(magic), static_cast<std::size_t>(n > 0 ? n : 0));
+        return std::make_unique<PrefixedInputStream>(std::move(plain), std::move(prefix));
+    }
+
+    plain.reset();
 
     if (kind == CompressionKind::Gzip)
     {
@@ -597,12 +599,7 @@ enum class CompressionKind
 #endif
     }
 
-    auto file = std::make_unique<std::ifstream>(path, std::ios::binary);
-    if (!*file)
-    {
-        if (error_out)
-            *error_out = "Unable to open file: " + path.string();
-        return nullptr;
-    }
-    return file;
+    if (error_out)
+        *error_out = "Unable to open file: " + path.string();
+    return nullptr;
 }

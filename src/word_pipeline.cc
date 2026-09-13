@@ -6,6 +6,7 @@
 
 #include "word_pipeline.hpp"
 #include "gzip_stream.hpp"
+#include "io_buffer.hpp"
 #include "membership_filter.hpp"
 #include "sort_dedup.hpp"
 
@@ -195,28 +196,6 @@ void trim_special_inplace(std::string &str) noexcept
     return buffer;
 }
 
-[[nodiscard]] bool read_record(std::istream &in, std::string &out, const bool null_separated)
-{
-    if (!null_separated)
-    {
-        if (!std::getline(in, out))
-            return false;
-        if (!out.empty() && out.back() == '\r')
-            out.pop_back();
-        return true;
-    }
-
-    out.clear();
-    char ch = '\0';
-    while (in.get(ch))
-    {
-        if (ch == '\0')
-            return true;
-        out.push_back(ch);
-    }
-    return !out.empty();
-}
-
 [[nodiscard]] std::expected<void, std::string> write_lines(const std::vector<std::string> &words,
                                                            const fs::path &path, const bool append,
                                                            const bool null_separated)
@@ -224,12 +203,11 @@ void trim_special_inplace(std::string &str) noexcept
     const char sep = null_separated ? '\0' : '\n';
     if (is_stdio_path(path))
     {
+        BufferedRecordWriter writer(std::cout, sep);
         for (const auto &word : words)
-        {
-            std::cout << word << sep;
-            if (!std::cout)
-                return std::unexpected("Failed to write to stdout");
-        }
+            writer.write(word);
+        if (!writer.flush() || !writer.good())
+            return std::unexpected("Failed to write to stdout");
         return {};
     }
 
@@ -238,12 +216,11 @@ void trim_special_inplace(std::string &str) noexcept
     if (!out)
         return std::unexpected(std::format("Failed to open output file for writing: {}", path.string()));
 
+    BufferedRecordWriter writer(out, sep);
     for (const auto &word : words)
-    {
-        out << word << sep;
-        if (!out)
-            return std::unexpected(std::format("Failed to write to output file: {}", path.string()));
-    }
+        writer.write(word);
+    if (!writer.flush() || !writer.good())
+        return std::unexpected(std::format("Failed to write to output file: {}", path.string()));
     return {};
 }
 
@@ -269,6 +246,11 @@ void trim_special_inplace(std::string &str) noexcept
         }
         in = owned_in.get();
     }
+
+    const char record_sep = options.null_separated ? '\0' : '\n';
+    std::unique_ptr<BufferedRecordWriter> stream_writer;
+    if (options.stream_out != nullptr)
+        stream_writer = std::make_unique<BufferedRecordWriter>(*options.stream_out, record_sep, options.stream_mutex);
 
     const auto accept_survivor = [&]() -> bool
     {
@@ -323,18 +305,9 @@ void trim_special_inplace(std::string &str) noexcept
         if (!accept_survivor())
             return;
 
-        if (options.stream_out != nullptr)
+        if (stream_writer != nullptr)
         {
-            const char sep = options.null_separated ? '\0' : '\n';
-            if (options.stream_mutex != nullptr)
-            {
-                std::lock_guard<std::mutex> lock(*options.stream_mutex);
-                *options.stream_out << *processed << sep;
-            }
-            else
-            {
-                *options.stream_out << *processed << sep;
-            }
+            stream_writer->write(*processed);
             // stream_emitted aliases survivor_count when both are set; avoid double-count.
             if (options.stream_emitted != nullptr && options.stream_emitted != options.survivor_count)
                 options.stream_emitted->fetch_add(1, std::memory_order_relaxed);
@@ -348,8 +321,9 @@ void trim_special_inplace(std::string &str) noexcept
         output_words.push_back(std::move(*processed));
     };
 
+    BufferedRecordReader reader(*in, record_sep);
     std::string line_str;
-    while (read_record(*in, line_str, options.null_separated))
+    while (reader.next(line_str))
     {
         if (limit_reached())
             break;
@@ -387,6 +361,11 @@ void trim_special_inplace(std::string &str) noexcept
     if (in->bad())
     {
         std::println(stderr, "Error: Unable to read file: {}", path.string());
+        return false;
+    }
+    if (stream_writer != nullptr && (!stream_writer->flush() || !stream_writer->good()))
+    {
+        std::println(stderr, "Error: Failed while writing streamed output for: {}", path.string());
         return false;
     }
     return true;

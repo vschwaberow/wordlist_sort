@@ -5,6 +5,7 @@
 // Copyright (c) 2026 Volker Schwaberow
 
 #include "sort_dedup.hpp"
+#include "io_buffer.hpp"
 
 #include <algorithm>
 #include <system_error>
@@ -149,29 +150,28 @@ namespace
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
     if (!out)
         return false;
+    BufferedRecordWriter writer(out, '\n');
     for (const auto &word : run_words)
-        out << word << '\n';
-    return static_cast<bool>(out);
+        writer.write(word);
+    return writer.flush() && writer.good();
 }
 
 struct RunReader
 {
-    std::ifstream in;
+    std::ifstream file;
+    BufferedRecordReader reader;
     std::string current;
     bool alive = false;
 
-    explicit RunReader(const std::filesystem::path &path) : in(path, std::ios::binary)
+    explicit RunReader(const std::filesystem::path &path)
+        : file(path, std::ios::binary), reader(file, '\n')
     {
-        alive = static_cast<bool>(in) && static_cast<bool>(std::getline(in, current));
-        if (alive && !current.empty() && current.back() == '\r')
-            current.pop_back();
+        alive = static_cast<bool>(file) && reader.next(current);
     }
 
     [[nodiscard]] bool advance()
     {
-        alive = static_cast<bool>(std::getline(in, current));
-        if (alive && !current.empty() && current.back() == '\r')
-            current.pop_back();
+        alive = reader.next(current);
         return alive;
     }
 };
@@ -259,6 +259,7 @@ void merge_run_files(const std::vector<std::filesystem::path> &run_paths,
             heap.push(Item{.run = r});
     }
 
+    BufferedRecordWriter writer(out, record_sep);
     std::size_t written = 0;
     std::string last;
     bool have_last = false;
@@ -269,7 +270,7 @@ void merge_run_files(const std::vector<std::filesystem::path> &run_paths,
         auto &reader = readers[top.run];
         if (!(plan.perform_deduplicate && have_last && reader.current == last))
         {
-            out << reader.current << record_sep;
+            writer.write(reader.current);
             last = reader.current;
             have_last = true;
             ++written;
@@ -277,6 +278,8 @@ void merge_run_files(const std::vector<std::filesystem::path> &run_paths,
         if (reader.advance())
             heap.push(Item{.run = top.run});
     }
+    if (!writer.flush() || !writer.good())
+        return 0;
     return written;
 }
 
@@ -425,8 +428,11 @@ std::size_t ExternalSortBuilder::finish_to_stream(std::ostream &out, const char 
     if (run_paths_.empty())
     {
         sort_and_deduplicate_words_cpu(buffer_, plan_);
+        BufferedRecordWriter writer(out, record_sep);
         for (const auto &word : buffer_)
-            out << word << record_sep;
+            writer.write(word);
+        if (!writer.flush() || !writer.good())
+            return 0;
         const auto n = buffer_.size();
         buffer_.clear();
         if (!quiet_)
@@ -449,11 +455,14 @@ std::size_t ExternalSortBuilder::finish_to_stream(std::ostream &out, const char 
     if (!buffer_.empty())
     {
         sort_and_deduplicate_words_cpu(buffer_, plan_);
+        BufferedRecordWriter writer(out, record_sep);
         for (const auto &word : buffer_)
         {
-            out << word << record_sep;
+            writer.write(word);
             ++written;
         }
+        if (!writer.flush() || !writer.good())
+            return 0;
         buffer_.clear();
     }
 
