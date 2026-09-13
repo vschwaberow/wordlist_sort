@@ -245,8 +245,40 @@ void trim_special_inplace(std::string &str) noexcept
         in = owned_in.get();
     }
 
+    const auto accept_survivor = [&]() -> bool
+    {
+        if (options.survivor_count == nullptr)
+            return options.limit <= 0;
+
+        if (options.limit <= 0)
+        {
+            options.survivor_count->fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
+
+        const std::size_t lim = static_cast<std::size_t>(options.limit);
+        std::size_t cur = options.survivor_count->load(std::memory_order_relaxed);
+        while (cur < lim)
+        {
+            if (options.survivor_count->compare_exchange_weak(cur, cur + 1, std::memory_order_relaxed,
+                                                              std::memory_order_relaxed))
+                return true;
+        }
+        return false;
+    };
+
+    const auto limit_reached = [&]() -> bool
+    {
+        return options.limit > 0 && options.survivor_count != nullptr &&
+               options.survivor_count->load(std::memory_order_relaxed) >=
+                   static_cast<std::size_t>(options.limit);
+    };
+
     const auto try_add_word = [&](const std::string_view candidate)
     {
+        if (limit_reached())
+            return;
+
         auto processed = process_word(candidate, options);
         if (!processed)
             return;
@@ -263,6 +295,9 @@ void trim_special_inplace(std::string &str) noexcept
             if (drop)
                 return;
         }
+        if (!accept_survivor())
+            return;
+
         if (options.stream_out != nullptr)
         {
             if (options.stream_mutex != nullptr)
@@ -274,7 +309,8 @@ void trim_special_inplace(std::string &str) noexcept
             {
                 *options.stream_out << *processed << '\n';
             }
-            if (options.stream_emitted != nullptr)
+            // stream_emitted aliases survivor_count when both are set; avoid double-count.
+            if (options.stream_emitted != nullptr && options.stream_emitted != options.survivor_count)
                 options.stream_emitted->fetch_add(1, std::memory_order_relaxed);
             return;
         }
@@ -289,6 +325,9 @@ void trim_special_inplace(std::string &str) noexcept
     std::string line_str;
     while (std::getline(*in, line_str))
     {
+        if (limit_reached())
+            break;
+
         if (!line_str.empty() && line_str.back() == '\r')
             line_str.pop_back();
 
