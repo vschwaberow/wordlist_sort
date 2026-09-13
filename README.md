@@ -85,3 +85,21 @@ Volker Schwaberow <volker@schwaberow.de>
 ## Contributing
 
 Contributions via fork, branch, and Pull Request.
+
+## Testing
+
+GoogleTest + CTest (requires `-DWORDLIST_SORT_BUILD_TESTS=ON`, default ON):
+
+```bash
+cmake -B build -DWORDLIST_SORT_BUILD_TESTS=ON
+cmake --build build -j
+ctest --test-dir build --output-on-failure -LE integration
+```
+
+CUDA build adds `sort_dedup_cuda_test` (label `cuda`). Convenience wrappers:
+
+```bash
+./build_and_test.sh
+./build_and_test_cuda.sh
+```
+
