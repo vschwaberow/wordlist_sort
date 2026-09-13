@@ -86,6 +86,8 @@ constexpr std::array flag_specs{
     FlagSpec{"--quiet",        &Options::quiet,        "Suppress informational stdout (errors/warnings still print)"},
     FlagSpec{"-q",             &Options::quiet,        "Short form of --quiet"},
     FlagSpec{"--progress",     &Options::progress,     "Print ingest progress to stderr (words/sec)"},
+    FlagSpec{"--force",        &Options::force,        "Overwrite existing output file"},
+    FlagSpec{"-f",             &Options::force,        "Short form of --force"},
 };
 
 constexpr std::array int_opt_specs{
@@ -390,6 +392,25 @@ int main(const int argc, char *argv[])
     {
         std::println(stderr, "Error: stdin (-) may be specified as an input at most once");
         return 1;
+    }
+
+    if (!is_stdio_path(args.output_path))
+    {
+        std::error_code ec;
+        if (std::filesystem::exists(args.output_path, ec))
+        {
+            if (std::filesystem::is_directory(args.output_path, ec))
+            {
+                std::println(stderr, "Error: output path is a directory: {}", args.output_path.string());
+                return 1;
+            }
+            if (!args.options.force)
+            {
+                std::println(stderr, "Error: output file exists (use --force to overwrite): {}",
+                             args.output_path.string());
+                return 1;
+            }
+        }
     }
 
     const bool stream_text = (*format == ExportFormat::Text) && !args.options.sort && !args.options.deduplicate;

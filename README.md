@@ -93,6 +93,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--no-cuda` | Force CPU sort/dedup even when CUDA is available |
 | `--cuda-timing` | Print CUDA phase timings (H2D / sort / dedup / D2H) to stderr |
 | `--progress` | Print ingest progress to stderr (avg + recent words/sec) |
+| `-f`, `--force` | Overwrite an existing output file (refused by default) |
 | `-q`, `--quiet` | Suppress informational stdout (errors/warnings still print) |
 
 Without a CUDA build, `--cuda` prints a note and uses the CPU path. If a CUDA run fails at runtime, the tool falls back to CPU with a warning.
