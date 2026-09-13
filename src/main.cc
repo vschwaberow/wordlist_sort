@@ -66,6 +66,7 @@ constexpr std::array flag_specs{
     FlagSpec{"--deduplicate",  &Options::deduplicate,  "Remove duplicate words from the final output list"},
     FlagSpec{"--cuda",         &Options::cuda,         "Use GPU for sort/dedup when built with CUDA and word count exceeds threshold"},
     FlagSpec{"--no-cuda",      &Options::no_cuda,      "Force CPU sort/dedup even when CUDA is available"},
+    FlagSpec{"--cuda-timing",  &Options::cuda_timing,  "Print CUDA phase timings (H2D/sort/dedup/D2H) to stderr"},
 };
 
 constexpr std::array int_opt_specs{
@@ -73,7 +74,7 @@ constexpr std::array int_opt_specs{
     IntOptSpec{"--maxtrim",        &Options::maxtrim,        "Trim words over a certain max length (chars)"},
     IntOptSpec{"--minlen",         &Options::minlen,         "Filter out words below a certain min length (chars)"},
     IntOptSpec{"--dup-sense",      &Options::dup_sense,      "Remove word if any single char is more than <N>% of the word (0-100)"},
-    IntOptSpec{"--cuda-threshold", &Options::cuda_threshold, "Minimum word count before using GPU sort/dedup (requires --cuda)"},
+    IntOptSpec{"--cuda-threshold", &Options::cuda_threshold, "Min words for GPU sort/dedup (0=auto heuristic ~100k; requires --cuda)"},
 };
 
 constexpr std::size_t compute_help_col_width()
@@ -257,6 +258,7 @@ int main(const int argc, char *argv[])
                                            .deduplicate = args.options.deduplicate,
                                            .use_cuda = args.options.cuda,
                                            .no_cuda = args.options.no_cuda,
+                                           .cuda_timing = args.options.cuda_timing,
                                            .cuda_threshold = static_cast<std::size_t>(args.options.cuda_threshold),
                                        });
 

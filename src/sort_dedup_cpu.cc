@@ -18,12 +18,12 @@ namespace
     return options.use_cuda && !options.no_cuda;
 }
 
-[[nodiscard]] bool cuda_eligible(const SortDedupOptions &options, const std::size_t word_count) noexcept
+[[nodiscard]] std::size_t total_payload_bytes(const std::vector<std::string> &words) noexcept
 {
-    return cuda_requested(options) &&
-           cuda_sort_dedup_is_compiled() &&
-           word_count >= options.cuda_threshold &&
-           cuda_sort_dedup_runtime_available();
+    std::size_t bytes = 0;
+    for (const auto &word : words)
+        bytes += word.size();
+    return bytes;
 }
 
 void print_cuda_not_compiled_note()
@@ -35,6 +35,19 @@ void print_cuda_not_compiled_note()
 void print_cuda_fallback_warning()
 {
     std::println(stderr, "Warning: CUDA sort/dedup failed; falling back to CPU.");
+}
+
+void print_cuda_below_threshold_note(const std::size_t word_count, const std::size_t threshold)
+{
+    std::println(stderr,
+                 "Note: --cuda ignored ({} words < threshold {}); use --cuda-threshold to lower or 0 for auto.",
+                 word_count, threshold);
+}
+
+void print_cuda_oom_note()
+{
+    std::println(stderr,
+                 "Note: --cuda ignored (working set does not fit in free VRAM); falling back to CPU.");
 }
 
 }
@@ -72,14 +85,38 @@ void sort_and_deduplicate_words(std::vector<std::string> &words, const SortDedup
     if (!plan.perform_sort && !plan.perform_deduplicate)
         return;
 
-    if (cuda_requested(options) && !cuda_sort_dedup_is_compiled())
-        print_cuda_not_compiled_note();
-    else if (cuda_eligible(options, words.size()))
+    if (cuda_requested(options))
     {
-        if (try_sort_and_deduplicate_words_cuda(words, plan))
-            return;
+        if (!cuda_sort_dedup_is_compiled())
+        {
+            print_cuda_not_compiled_note();
+        }
+        else if (!cuda_sort_dedup_runtime_available())
+        {
+            std::println(stderr, "Note: --cuda ignored (no usable CUDA device); using CPU.");
+        }
+        else
+        {
+            const std::size_t threshold = resolve_cuda_word_threshold(options.cuda_threshold);
+            const std::size_t payload = total_payload_bytes(words);
 
-        print_cuda_fallback_warning();
+            if (words.size() < threshold)
+            {
+                print_cuda_below_threshold_note(words.size(), threshold);
+            }
+            else if (!cuda_sort_dedup_memory_available(words.size(), payload))
+            {
+                print_cuda_oom_note();
+            }
+            else if (try_sort_and_deduplicate_words_cuda(words, plan, options.cuda_timing))
+            {
+                return;
+            }
+            else
+            {
+                print_cuda_fallback_warning();
+            }
+        }
     }
 
     sort_and_deduplicate_words_cpu(words, plan);

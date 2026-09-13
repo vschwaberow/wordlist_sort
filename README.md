@@ -48,7 +48,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--maxtrim <int>` | Truncate words to N chars |
 | `--minlen <int>` | Filter out words shorter than N chars |
 | `--dup-sense <int>` | Remove word if any single char exceeds N% (0–100) |
-| `--cuda-threshold <int>` | Minimum word count before GPU sort/dedup (default: 10000000; requires `--cuda`) |
+| `--cuda-threshold <int>` | Minimum word count before GPU sort/dedup (default: 10000000; `0` = auto ≈100k; requires `--cuda`) |
 
 ### Flags
 
@@ -69,8 +69,11 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--deduplicate` | Remove duplicate words (forces sort if not already set) |
 | `--cuda` | Prefer GPU sort/dedup when built with CUDA and word count ≥ `--cuda-threshold` |
 | `--no-cuda` | Force CPU sort/dedup even when CUDA is available |
+| `--cuda-timing` | Print CUDA phase timings (H2D / sort / dedup / D2H) to stderr |
 
 Without a CUDA build, `--cuda` prints a note and uses the CPU path. If a CUDA run fails at runtime, the tool falls back to CPU with a warning.
+
+GPU transfers use **pinned host memory**. Before launching, the tool checks free VRAM against a conservative working-set estimate; if the list does not fit, it falls back to CPU with a note. `--cuda-threshold 0` selects an auto minimum (~100k words) instead of the 10M default.
 
 ## Example
 
