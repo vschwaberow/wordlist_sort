@@ -103,6 +103,8 @@ These are behaviors not clearly documented and easy to get wrong:
 - **Positional order defaults to OUTPUT first**, then inputs (`wordlist_sort <out> <in...>`). Prefer `-o`/`--output` so all positionals are inputs (`wordlist_sort -o out in1 in2`).
 - **`-` means stdio**: input `-` reads stdin (at most once); output `-` writes `--format=text` to stdout and forces quiet. Non-text formats refuse stdout.
 - **`--noutf8`** strips bytes `>127` on every input line (independent of `--dewebify`).
+- **`--progress`**: ingest ticker on stderr (works with `-q` / stdout `-`; does not write to stdout).
+- **Ingest failure exits 1**: if any input file fails to open/read, the process exits non-zero (no silent partial success).
 - **`-q` / `--quiet`**: suppress banners and status lines on stdout (and non-fatal notes); errors/warnings stay on stderr.
 - **`--deduplicate` implies `--sort`**: if you pass `--deduplicate` alone, the CLI auto-enables `--sort` and prints a one-line note to stderr (global dedup needs a sorted pass).
 - **Threading is one `std::async` task per input file**, gated by `--jobs` (default: `hardware_concurrency` via counting semaphore; `0` = unlimited). Each task streams its file line-by-line.
