@@ -106,7 +106,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **Threading is one `std::async` task per input file** (`std::launch::async`), with no thread pool or concurrency cap. Passing hundreds of files spawns hundreds of threads. Each task streams its file line-by-line; peak RAM scales with survivor words (plus B filter when set filters are used), not full concurrent file sizes.
 - **`--cuda` / `--no-cuda` / `--cuda-threshold`**: GPU sort/dedup (compile-time optional via `-DWORDLIST_SORT_CUDA=ON`). See gotcha §6.
 - **`--exclude` / `--intersect` / `--filter-engine`**: build/open B filter first, then stream A with early drop; text B uses `hash|fst|pthash`; WLTRIE1/`*.cdb` opened as in-memory indexes (`open_membership_filter`).
-- **`--format text|cdb|fst`**: output encoder after sort/dedup (`cdb` = DJB Constant Database, `fst` = WLTRIE1 compact trie). Duplicate keys keep the first occurrence.
+- **`--format text|cdb|fst|pthash`**: output encoder after sort/dedup (`cdb` = DJB CDB, `fst` = WLTRIE1, `pthash` = WLPTH1 MPHF+keys). Duplicate keys keep the first occurrence.
 - **`--dup-sense N` (0–100)** rejects a word if *any single byte* exceeds `N%` of the word's length (uses a 256-bucket `std::array<unsigned int, 256>` char histogram).
 
 ## Architecture & Data Flow

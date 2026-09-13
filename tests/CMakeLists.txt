@@ -65,6 +65,7 @@ wordlist_sort_add_cxx_test(export_format_test
     ${CMAKE_SOURCE_DIR}/src/export_format.cc
     ${CMAKE_SOURCE_DIR}/src/cdb_export.cc
     ${CMAKE_SOURCE_DIR}/src/fst_export.cc
+    ${CMAKE_SOURCE_DIR}/src/membership_filter.cc
     ${WORDLIST_SORT_PIPELINE})
 
 wordlist_sort_add_cxx_test(membership_filter_test
@@ -76,9 +77,11 @@ wordlist_sort_add_cxx_test(membership_filter_test
     ${WORDLIST_SORT_PIPELINE})
 
 if(WORDLIST_SORT_PTHASH)
-    target_link_libraries(membership_filter_test PRIVATE PTHASH)
-    target_include_directories(membership_filter_test PRIVATE ${pthash_SOURCE_DIR})
-    target_compile_definitions(membership_filter_test PRIVATE WORDLIST_SORT_PTHASH=1)
+    foreach(_t IN ITEMS membership_filter_test export_format_test)
+        target_link_libraries(${_t} PRIVATE PTHASH)
+        target_include_directories(${_t} PRIVATE ${pthash_SOURCE_DIR})
+        target_compile_definitions(${_t} PRIVATE WORDLIST_SORT_PTHASH=1)
+    endforeach()
     set_source_files_properties(${CMAKE_SOURCE_DIR}/src/membership_filter.cc PROPERTIES
         COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang>:-Wno-conversion;-Wno-float-conversion;-Wno-unused-but-set-variable;-Wno-error>")
 endif()

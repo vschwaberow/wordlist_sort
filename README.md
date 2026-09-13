@@ -57,7 +57,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--minlen <int>` | Filter out words shorter than N chars |
 | `--dup-sense <int>` | Remove word if any single char exceeds N% (0–100) |
 | `--cuda-threshold <int>` | Minimum word count before GPU sort/dedup (default: 10000000; `0` = auto ≈100k; requires `--cuda`) |
-| `--format <str>` | Output format: `text` (default), `cdb` (DJB Constant Database), `fst` (compact trie / WLTRIE1) |
+| `--format <str>` | Output format: `text` (default), `cdb`, `fst` (WLTRIE1), `pthash` (WLPTH1) |
 | `--exclude <file>` | Drop words that occur in FILE (set difference A\\B) |
 | `--intersect <file>` | Keep only words that also occur in FILE (A∩B) |
 | `--filter-engine <str>` | Membership backend for exclude/intersect: `hash` (default), `fst`, `pthash` |
@@ -112,6 +112,7 @@ Build a membership index from FILE B **first**, then **stream** input files (A) 
 B may be a plain text wordlist **or** a previously exported index:
 - `WLTRIE1` (`.fst` from `--format=fst`) — detected by magic; `--filter-engine` ignored
 - `.cdb` (from `--format=cdb`) — detected by extension; `--filter-engine` ignored
+- `WLPTH1` (from `--format=pthash`) — detected by magic; `--filter-engine` ignored
 
 ```bash
 ./build/wordlist_sort --format=fst block.fst block.txt
@@ -126,6 +127,7 @@ B may be a plain text wordlist **or** a previously exported index:
 | `text` (default) | One word per line (existing behavior) |
 | `cdb` | DJB **Constant Database** (tinycdb-compatible). Each word is a key with an empty value. Classic CDB 4 GiB limit. Duplicate keys: first wins. |
 | `fst` | Compact **prefix trie** on disk (`WLTRIE1`). Exact membership lookups; shared prefixes. Duplicate keys: first wins. |
+| `pthash` | **WLPTH1** container: PTHash MPHF + key table (needs `WORDLIST_SORT_PTHASH`). Reusable as `--exclude`/`--intersect` without rebuild. |
 
 ```bash
 ./build/wordlist_sort --sort --deduplicate --format=cdb words.cdb list.txt

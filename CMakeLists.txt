@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 project(wordlist_sort LANGUAGES CXX)
 
 set(PROJECT_NAME "wordlist_sort")
-set(PROJECT_VERSION "0.6.0")
+set(PROJECT_VERSION "0.7.0")
 set(PROJECT_AUTHOR "Volker Schwaberow <volker@schwaberow.de>")
 set(PROJECT_COPYRIGHT "Copyright (c) 2024-2026 Volker Schwaberow")
 
