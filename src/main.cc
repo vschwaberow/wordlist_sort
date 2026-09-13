@@ -26,6 +26,7 @@
 #include <system_error>
 #include <print>
 #include <ranges>
+#include <regex>
 #include <expected>
 #include <span>
 #include <thread>
@@ -119,6 +120,7 @@ constexpr std::array str_opt_specs{
     StrOptSpec{"--tmp-dir", &Options::tmp_dir, "Directory for external-sort / filter temp files (default: system temp)"},
     StrOptSpec{"--prefix", &Options::prefix, "Keep only words that start with PREFIX"},
     StrOptSpec{"--suffix", &Options::suffix, "Keep only words that end with SUFFIX"},
+    StrOptSpec{"--regex", &Options::regex_pattern, "Keep only words matching ECMAScript regex"},
 };
 
 constexpr std::size_t compute_help_col_width()
@@ -406,6 +408,21 @@ int main(const int argc, char *argv[])
     {
         std::println(stderr, "Error: --null is only supported with --format=text");
         return 1;
+    }
+
+    std::optional<std::regex> compiled_regex;
+    if (!args.options.regex_pattern.empty())
+    {
+        try
+        {
+            compiled_regex.emplace(args.options.regex_pattern, std::regex::ECMAScript);
+        }
+        catch (const std::regex_error &ex)
+        {
+            std::println(stderr, "Error: invalid --regex: {}", ex.what());
+            return 1;
+        }
+        args.options.regex = &(*compiled_regex);
     }
     if (*format != ExportFormat::Text && path_looks_gzip(args.output_path))
     {
