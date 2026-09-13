@@ -43,6 +43,8 @@ struct Options
     bool no_cuda = false;
     bool cuda_timing = false;
     int cuda_threshold = 10'000'000;
+    /// Parallel input workers: -1 = auto (default; omit --jobs), 0 = unlimited, >0 = cap.
+    int jobs = -1;
     std::string format = "text";
     std::string exclude_path;
     std::string intersect_path;

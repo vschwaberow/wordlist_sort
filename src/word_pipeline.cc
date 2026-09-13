@@ -13,6 +13,8 @@
 #include <fstream>
 #include <future>
 #include <mutex>
+#include <semaphore>
+#include <thread>
 #include <print>
 #include <ranges>
 #include <span>
@@ -291,6 +293,19 @@ void trim_special_inplace(std::string &str) noexcept
     return true;
 }
 
+[[nodiscard]] std::size_t resolve_job_limit(const int jobs, const std::size_t path_count) noexcept
+{
+    if (path_count == 0)
+        return 1;
+    if (jobs == 0)
+        return path_count; // unlimited: one task per file
+    if (jobs > 0)
+        return std::min(path_count, static_cast<std::size_t>(jobs));
+    const unsigned hw = std::thread::hardware_concurrency();
+    const std::size_t auto_jobs = hw == 0 ? 1u : static_cast<std::size_t>(hw);
+    return std::min(path_count, auto_jobs);
+}
+
 [[nodiscard]] bool process_multiple_files_parallel(const std::vector<fs::path> &paths,
                                                    std::vector<std::string> &words,
                                                    std::atomic<std::size_t> &total_words,
@@ -299,14 +314,20 @@ void trim_special_inplace(std::string &str) noexcept
     std::vector<std::future<std::pair<std::vector<std::string>, bool>>> futures;
     futures.reserve(paths.size());
 
+    const std::size_t job_limit = resolve_job_limit(options.jobs, paths.size());
+    // counting_semaphore requires a compile-time-ish max; use a large bound and acquire down to job_limit.
+    std::counting_semaphore<> slots{static_cast<std::ptrdiff_t>(job_limit)};
+
     for (const auto &path : paths)
     {
         futures.emplace_back(std::async(std::launch::async,
-                                        [&options, path, &total_words]() -> std::pair<std::vector<std::string>, bool>
+                                        [&options, path, &total_words, &slots]() -> std::pair<std::vector<std::string>, bool>
                                         {
+                                            slots.acquire();
                                             std::vector<std::string> local_task_words;
                                             const bool success =
                                                 process_file(path, local_task_words, total_words, options);
+                                            slots.release();
                                             return {std::move(local_task_words), success};
                                         }));
     }
