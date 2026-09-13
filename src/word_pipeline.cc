@@ -12,6 +12,7 @@
 #include <array>
 #include <format>
 #include <fstream>
+#include <iostream>
 #include <future>
 #include <mutex>
 #include <semaphore>
@@ -195,6 +196,17 @@ void trim_special_inplace(std::string &str) noexcept
 [[nodiscard]] std::expected<void, std::string> write_lines(const std::vector<std::string> &words,
                                                            const fs::path &path)
 {
+    if (is_stdio_path(path))
+    {
+        for (const auto &word : words)
+        {
+            std::cout << word << '\n';
+            if (!std::cout)
+                return std::unexpected("Failed to write to stdout");
+        }
+        return {};
+    }
+
     std::ofstream out(path);
     if (!out)
         return std::unexpected(std::format("Failed to open output file for writing: {}", path.string()));
@@ -213,11 +225,21 @@ void trim_special_inplace(std::string &str) noexcept
                                 std::atomic<std::size_t> &total_words_processed_counter,
                                 const Options &options)
 {
-    std::ifstream file(path, std::ios::binary);
-    if (!file)
+    std::ifstream file;
+    std::istream *in = nullptr;
+    if (is_stdio_path(path))
     {
-        std::println(stderr, "Error: Unable to open file: {}", path.string());
-        return false;
+        in = &std::cin;
+    }
+    else
+    {
+        file.open(path, std::ios::binary);
+        if (!file)
+        {
+            std::println(stderr, "Error: Unable to open file: {}", path.string());
+            return false;
+        }
+        in = &file;
     }
 
     const auto try_add_word = [&](const std::string_view candidate)
@@ -262,7 +284,7 @@ void trim_special_inplace(std::string &str) noexcept
     };
 
     std::string line_str;
-    while (std::getline(file, line_str))
+    while (std::getline(*in, line_str))
     {
         if (!line_str.empty() && line_str.back() == '\r')
             line_str.pop_back();
@@ -290,7 +312,7 @@ void trim_special_inplace(std::string &str) noexcept
         }
     }
 
-    if (file.bad())
+    if (in->bad())
     {
         std::println(stderr, "Error: Unable to read file: {}", path.string());
         return false;
@@ -316,6 +338,14 @@ void trim_special_inplace(std::string &str) noexcept
                                                    std::atomic<std::size_t> &total_words,
                                                    const Options &options)
 {
+    const std::size_t stdin_count = static_cast<std::size_t>(
+        std::count_if(paths.begin(), paths.end(), [](const fs::path &p) { return is_stdio_path(p); }));
+    if (stdin_count > 1)
+    {
+        std::println(stderr, "Error: stdin (-) may be specified as an input at most once");
+        return false;
+    }
+
     std::vector<std::future<std::pair<std::vector<std::string>, bool>>> futures;
     futures.reserve(paths.size());
 

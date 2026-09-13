@@ -101,6 +101,7 @@ cmake --build build-cuda -j
 These are behaviors not clearly documented and easy to get wrong:
 
 - **Positional order defaults to OUTPUT first**, then inputs (`wordlist_sort <out> <in...>`). Prefer `-o`/`--output` so all positionals are inputs (`wordlist_sort -o out in1 in2`).
+- **`-` means stdio**: input `-` reads stdin (at most once); output `-` writes `--format=text` to stdout and forces quiet. Non-text formats refuse stdout.
 - **`--noutf8`** strips bytes `>127` on every input line (independent of `--dewebify`).
 - **`-q` / `--quiet`**: suppress banners and status lines on stdout (and non-fatal notes); errors/warnings stay on stderr.
 - **`--deduplicate` implies `--sort`**: if you pass `--deduplicate` alone, the CLI auto-enables `--sort` and prints a one-line note to stderr (global dedup needs a sorted pass).

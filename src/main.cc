@@ -9,6 +9,7 @@
 #include "sort_dedup.hpp"
 #include "word_pipeline.hpp"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <charconv>
@@ -18,6 +19,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <format>
 #include <optional>
 #include <system_error>
@@ -99,7 +101,7 @@ constexpr std::array str_opt_specs{
     StrOptSpec{"--exclude", &Options::exclude_path, "Drop words present in FILE (set difference A\\B)"},
     StrOptSpec{"--intersect", &Options::intersect_path, "Keep only words also present in FILE (A∩B)"},
     StrOptSpec{"--filter-engine", &Options::filter_engine, "Membership engine for --exclude/--intersect: hash (default), fst, pthash"},
-    StrOptSpec{"--output", &Options::output_override, "Output file path (alternative to positional <output>)"},
+    StrOptSpec{"--output", &Options::output_override, "Output path or - for stdout (alternative to positional <output>)"},
     StrOptSpec{"-o", &Options::output_override, "Short form of --output"},
     StrOptSpec{"--tmp-dir", &Options::tmp_dir, "Directory for external-sort / filter temp files (default: system temp)"},
 };
@@ -145,8 +147,8 @@ void print_usage()
     std::println("A high-performance tool for processing, filtering, and sorting wordlists.");
     std::println();
     std::println("Arguments:");
-    std::println("  {:{}}  Output file path (or use -o/--output)", "<output>", help_col_width);
-    std::println("  {:{}}  Input file path(s) (at least one required)", "<input> ...", help_col_width);
+    std::println("  {:{}}  Output file path, or - for stdout (or use -o/--output)", "<output>", help_col_width);
+    std::println("  {:{}}  Input file path(s); use - for stdin (at most once)", "<input> ...", help_col_width);
     std::println();
     std::println("Options:");
     for (const auto &s : int_opt_specs)
@@ -296,6 +298,10 @@ int main(const int argc, char *argv[])
 
     auto &args = **parse_result;
 
+    // Writing word data to stdout must not mix with banners/status on stdout.
+    if (is_stdio_path(args.output_path))
+        args.options.quiet = true;
+
     if (args.options.deduplicate && !args.options.sort)
     {
         if (!args.options.quiet)
@@ -368,6 +374,21 @@ int main(const int argc, char *argv[])
         return 1;
     }
 
+    if (is_stdio_path(args.output_path) && *format != ExportFormat::Text)
+    {
+        std::println(stderr, "Error: stdout (-) is only supported with --format=text");
+        return 1;
+    }
+
+    const std::size_t stdin_inputs = static_cast<std::size_t>(std::count_if(
+        args.input_paths.begin(), args.input_paths.end(),
+        [](const fs::path &p) { return is_stdio_path(p); }));
+    if (stdin_inputs > 1)
+    {
+        std::println(stderr, "Error: stdin (-) may be specified as an input at most once");
+        return 1;
+    }
+
     const bool stream_text = (*format == ExportFormat::Text) && !args.options.sort && !args.options.deduplicate;
     const bool want_cuda = args.options.cuda && !args.options.no_cuda;
     const bool external_ingest = !stream_text && !want_cuda && args.options.sort_chunk > 0 &&
@@ -383,13 +404,20 @@ int main(const int argc, char *argv[])
 
     if (stream_text)
     {
-        stream_file.open(args.output_path, std::ios::binary | std::ios::trunc);
-        if (!stream_file)
+        if (is_stdio_path(args.output_path))
         {
-            std::println(stderr, "Error: Failed to open output file for writing: {}", args.output_path.string());
-            return 1;
+            args.options.stream_out = &std::cout;
         }
-        args.options.stream_out = &stream_file;
+        else
+        {
+            stream_file.open(args.output_path, std::ios::binary | std::ios::trunc);
+            if (!stream_file)
+            {
+                std::println(stderr, "Error: Failed to open output file for writing: {}", args.output_path.string());
+                return 1;
+            }
+            args.options.stream_out = &stream_file;
+        }
         args.options.stream_mutex = &stream_mutex;
         args.options.stream_emitted = &streamed_words;
         if (!args.options.quiet)
@@ -422,19 +450,33 @@ int main(const int argc, char *argv[])
     {
         if (external_ingest && *format == ExportFormat::Text)
         {
-            std::ofstream out_file(args.output_path, std::ios::binary | std::ios::trunc);
-            if (!out_file)
+            if (is_stdio_path(args.output_path))
             {
-                std::println(stderr, "Error: Failed to open output file for writing: {}", args.output_path.string());
-                return 1;
+                external_streamed = external_builder->finish_to_stream(std::cout);
+                args.options.external_sort = nullptr;
+                std::cout.flush();
+                if (!std::cout)
+                {
+                    std::println(stderr, "Error: Failed while writing external-sort output to stdout");
+                    return 1;
+                }
             }
-            external_streamed = external_builder->finish_to_stream(out_file);
-            args.options.external_sort = nullptr;
-            out_file.flush();
-            if (!out_file)
+            else
             {
-                std::println(stderr, "Error: Failed while writing external-sort output: {}", args.output_path.string());
-                return 1;
+                std::ofstream out_file(args.output_path, std::ios::binary | std::ios::trunc);
+                if (!out_file)
+                {
+                    std::println(stderr, "Error: Failed to open output file for writing: {}", args.output_path.string());
+                    return 1;
+                }
+                external_streamed = external_builder->finish_to_stream(out_file);
+                args.options.external_sort = nullptr;
+                out_file.flush();
+                if (!out_file)
+                {
+                    std::println(stderr, "Error: Failed while writing external-sort output: {}", args.output_path.string());
+                    return 1;
+                }
             }
         }
         else if (external_ingest)
@@ -470,11 +512,23 @@ int main(const int argc, char *argv[])
     }
     else
     {
-        stream_file.flush();
-        if (!stream_file)
+        if (is_stdio_path(args.output_path))
         {
-            std::println(stderr, "Error: Failed while writing streamed output: {}", args.output_path.string());
-            return 1;
+            std::cout.flush();
+            if (!std::cout)
+            {
+                std::println(stderr, "Error: Failed while writing streamed output to stdout");
+                return 1;
+            }
+        }
+        else
+        {
+            stream_file.flush();
+            if (!stream_file)
+            {
+                std::println(stderr, "Error: Failed while writing streamed output: {}", args.output_path.string());
+                return 1;
+            }
         }
     }
 

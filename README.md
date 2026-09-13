@@ -45,6 +45,8 @@ cmake --build build-cuda -j
 
 By default the first positional is the **output** file, followed by one or more **inputs**. With `-o`/`--output`, all positionals are inputs.
 
+Use `-` as an input to read stdin (at most once) and `-` as output (`-o -` or positional) to write text to stdout. Binary formats (`cdb`/`fst`/`pthash`) cannot target stdout. Writing to stdout implies quiet mode so banners do not corrupt the pipe.
+
 Integer options accept `--opt value` or `--opt=value` (values must be non-negative). Options, flags, and positionals can appear in any order. `--` ends option parsing.
 
 ### Options
@@ -62,7 +64,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--sort-chunk <int>` | External CPU sort/dedup: max words per temp run (`0` = off; spills when the list is larger) |
 | `--tmp-dir <path>` | Directory for external-sort / filter temp files (default: system temp; created if missing) |
 | `--format <str>` | Output format: `text` (default), `cdb`, `fst` (WLTRIE1), `pthash` (WLPTH1) |
-| `-o`, `--output <file>` | Output path (alternative to positional `<output>`; then all positionals are inputs) |
+| `-o`, `--output <file>` | Output path or `-` for stdout (alternative to positional `<output>`; then all positionals are inputs) |
 | `--exclude <file>` | Drop words that occur in FILE (set difference A\\B) |
 | `--intersect <file>` | Keep only words that also occur in FILE (A∩B) |
 | `--filter-engine <str>` | Membership backend for exclude/intersect: `hash` (default), `fst`, `pthash` |

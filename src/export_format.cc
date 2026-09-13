@@ -43,6 +43,9 @@
                                                             const std::filesystem::path &path,
                                                             const ExportFormat format)
 {
+    if (path == "-" && format != ExportFormat::Text)
+        return std::unexpected("stdout (-) is only supported with --format=text");
+
     switch (format)
     {
     case ExportFormat::Text:

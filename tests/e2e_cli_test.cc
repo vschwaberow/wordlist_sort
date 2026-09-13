@@ -161,3 +161,37 @@ TEST(E2eCli, TmpDirExternalSort)
     EXPECT_EQ(test_helpers::read_text_file(output), "a\nb\nc\n");
     EXPECT_TRUE(fs::is_directory(tmp));
 }
+
+TEST(E2eCli, StdinStdoutDash)
+{
+    const auto result = test_helpers::run_command(
+        "printf 'b\\na\\nb\\n' | " + shell_quote(wordlist_sort_exe()) +
+        " --sort --deduplicate -o - -");
+    EXPECT_EQ(result.exit_code, 0);
+    EXPECT_EQ(result.stdout_text, "a\nb\n");
+    EXPECT_EQ(result.stdout_text.find("version"), std::string::npos);
+}
+
+TEST(E2eCli, StdoutRejectsBinaryFormat)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    test_helpers::write_text_file(input, "a\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --format=cdb -o - " + shell_quote(input.string()));
+    EXPECT_NE(result.exit_code, 0);
+    EXPECT_NE(result.stderr_text.find("stdout"), std::string::npos);
+}
+
+TEST(E2eCli, MultipleStdinRejected)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path output = work / "out.txt";
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) + " -q " +
+                                                shell_quote(output.string()) + " - -");
+    EXPECT_NE(result.exit_code, 0);
+    EXPECT_NE(result.stderr_text.find("stdin"), std::string::npos);
+}
+
