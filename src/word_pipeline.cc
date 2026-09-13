@@ -22,6 +22,7 @@
 #include <thread>
 #include <print>
 #include <ranges>
+#include <random>
 #include <span>
 
 namespace fs = std::filesystem;
@@ -322,6 +323,33 @@ void trim_special_inplace(std::string &str) noexcept
         }
         if (!accept_survivor())
             return;
+
+        if (options.every_n > 0 && options.every_counter != nullptr)
+        {
+            const std::size_t i = options.every_counter->fetch_add(1, std::memory_order_relaxed);
+            if ((i % static_cast<std::size_t>(options.every_n)) != 0)
+                return;
+        }
+
+        if (options.sample != nullptr && options.sample->capacity > 0)
+        {
+            const std::size_t i = options.sample->seen.fetch_add(1, std::memory_order_relaxed);
+            std::lock_guard<std::mutex> lock(options.sample->mutex);
+            if (i < options.sample->capacity)
+            {
+                options.sample->reservoir.push_back(std::move(*processed));
+            }
+            else
+            {
+                // Reservoir sampling: replace with probability capacity/(i+1).
+                thread_local std::mt19937_64 rng{std::random_device{}()};
+                std::uniform_int_distribution<std::size_t> dist(0, i);
+                const std::size_t j = dist(rng);
+                if (j < options.sample->capacity)
+                    options.sample->reservoir[j] = std::move(*processed);
+            }
+            return;
+        }
 
         if (stream_writer != nullptr)
         {

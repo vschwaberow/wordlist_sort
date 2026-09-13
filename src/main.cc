@@ -109,6 +109,8 @@ constexpr std::array int_opt_specs{
     IntOptSpec{"--jobs", &Options::jobs, "Parallel input workers (omit=auto CPU count, 0=unlimited, >0=cap)"},
     IntOptSpec{"--sort-chunk", &Options::sort_chunk, "External CPU sort/dedup: words per temp run (0=off; spills when larger)"},
     IntOptSpec{"--limit", &Options::limit, "Stop ingest after N accepted survivors (0=unlimited)"},
+    IntOptSpec{"--every", &Options::every_n, "Keep every N-th accepted survivor (0=off; 0-based)"},
+    IntOptSpec{"--sample", &Options::sample_n, "Reservoir-sample N accepted survivors (0=off)"},
 };
 
 constexpr std::array str_opt_specs{
@@ -425,6 +427,12 @@ int main(const int argc, char *argv[])
         }
         args.options.regex = &(*compiled_regex);
     }
+    if (args.options.every_n > 0 && args.options.sample_n > 0)
+    {
+        std::println(stderr, "Error: --every and --sample are mutually exclusive");
+        return 1;
+    }
+
     if (*format != ExportFormat::Text && path_looks_gzip(args.output_path))
     {
         std::println(stderr, "Error: gzip output (.gz) is only supported with --format=text");
@@ -490,7 +498,8 @@ int main(const int argc, char *argv[])
         return 0;
     }
 
-    const bool stream_text = (*format == ExportFormat::Text) && !args.options.sort && !args.options.deduplicate;
+    const bool stream_text = (*format == ExportFormat::Text) && !args.options.sort && !args.options.deduplicate &&
+                             args.options.sample_n <= 0;
     const bool want_cuda = args.options.cuda && !args.options.no_cuda;
     const bool external_ingest = !stream_text && !want_cuda && args.options.sort_chunk > 0 &&
                                  (args.options.sort || args.options.deduplicate);
@@ -499,8 +508,18 @@ int main(const int argc, char *argv[])
     std::atomic<std::size_t> total_words_processed{0};
     std::atomic<std::size_t> streamed_words{0};
     std::atomic<std::size_t> survivors{0};
+    std::atomic<std::size_t> every_counter{0};
+    SampleState sample_state;
     std::vector<std::string> words;
     args.options.survivor_count = &survivors;
+    if (args.options.every_n > 0)
+        args.options.every_counter = &every_counter;
+    if (args.options.sample_n > 0)
+    {
+        sample_state.capacity = static_cast<std::size_t>(args.options.sample_n);
+        sample_state.reservoir.reserve(sample_state.capacity);
+        args.options.sample = &sample_state;
+    }
     std::mutex stream_mutex;
     std::unique_ptr<std::ostream> stream_out_owned;
     std::optional<ExternalSortBuilder> external_builder;
@@ -588,6 +607,9 @@ int main(const int argc, char *argv[])
         std::println(stderr, "Error: One or more input files failed to process completely.");
         return 1;
     }
+
+    if (args.options.sample != nullptr)
+        words = std::move(args.options.sample->reservoir);
 
     if (use_membership)
     {

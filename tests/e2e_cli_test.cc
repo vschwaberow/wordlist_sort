@@ -591,3 +591,36 @@ TEST(E2eCli, CheckSortedDisorder)
     EXPECT_NE(result.exit_code, 0);
     EXPECT_NE(result.stderr_text.find("disorder"), std::string::npos) << result.stderr_text;
 }
+
+TEST(E2eCli, EveryNth)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "a\nb\nc\nd\ne\nf\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --every 2 " + shell_quote(output.string()) + " " +
+                                                shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(output), "a\nc\ne\n");
+}
+
+TEST(E2eCli, SampleSize)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "a\nb\nc\nd\ne\nf\ng\nh\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --sample 3 --sort " + shell_quote(output.string()) + " " +
+                                                shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    const auto out = test_helpers::read_text_file(output);
+    std::size_t lines = 0;
+    for (char c : out)
+        if (c == '\n')
+            ++lines;
+    EXPECT_EQ(lines, 3u) << out;
+}

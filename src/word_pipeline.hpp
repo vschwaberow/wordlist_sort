@@ -19,6 +19,15 @@
 #include <vector>
 
 class MembershipFilter;
+
+struct SampleState
+{
+    std::mutex mutex;
+    std::vector<std::string> reservoir;
+    std::atomic<std::size_t> seen{0};
+    std::size_t capacity = 0;
+};
+
 class ExternalSortBuilder;
 
 struct Options
@@ -60,6 +69,8 @@ struct Options
     int sort_chunk = 0;
     /// Cap accepted survivors during ingest (0 = unlimited).
     int limit = 0;
+    int every_n = 0;
+    int sample_n = 0;
     std::string tmp_dir;
     std::string prefix;
     std::string suffix;
@@ -79,6 +90,8 @@ struct Options
     /// Counts accepted survivors; used with --limit and optional stream accounting.
     std::atomic<std::size_t> *survivor_count = nullptr;
     ExternalSortBuilder *external_sort = nullptr;
+    std::atomic<std::size_t> *every_counter = nullptr;
+    SampleState *sample = nullptr;
 };
 
 [[nodiscard]] inline bool is_stdio_path(const std::filesystem::path &path) noexcept

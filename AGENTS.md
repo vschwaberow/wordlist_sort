@@ -117,6 +117,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **`--progress`**: ingest ticker on stderr (works with `-q` / stdout `-`; does not write to stdout).
 - **`--stats`**: one final line on stderr with ingest/output counts and duration (works with `-q`).
 - **`--check-sorted`**: verify inputs are lexicographically sorted (with `--deduplicate`: strictly ascending); writes no output; exit 0/1.
+- **`--every N` / `--sample N`**: after `--limit`, keep every N-th survivor (0-based) or reservoir-sample N; mutually exclusive. `--sample` disables text streaming.
 - **Ingest failure exits 1**: if any input file fails to open/read, the process exits non-zero (no silent partial success).
 - **`-q` / `--quiet`**: suppress banners and status lines on stdout (and non-fatal notes); errors/warnings stay on stderr.
 - **`--deduplicate` implies `--sort`**: if you pass `--deduplicate` alone, the CLI auto-enables `--sort` and prints a one-line note to stderr (global dedup needs a sorted pass).
