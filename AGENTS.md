@@ -111,6 +111,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **Glob inputs / `--recursive` (`-r`)**: if a positional input does not exist as a literal path and contains `*`, `?`, or `[]`, it is expanded via `glob(3)` (empty match → exit 1). Directory inputs require `-r`/`--recursive` and collect `.txt` plus known compressed extensions (`.gz`/`.zst`/`.zstd`/`.xz`/`.lz4`). Expanded paths are sorted uniquely before ingest.
 - **`--compress gzip|zstd|xz|lz4`** (aliases `gz`/`zst`): compress `--format=text` written to stdout `-` via the same encoders as extension-based file output; rejected for file outputs and binary formats.
 - **`--lookup INDEX`**: query inputs against a prebuilt membership index (`.cdb` / `WLTRIE1` / `WLPTH1`, or text with `--filter-engine`); keep hits only. Mutually exclusive with `--exclude` / `--intersect`.
+- **`--fuzzy` / `--distance N`**: with `--lookup` on a WLTRIE1 FST, expand each query to index keys within Levenshtein distance N (default 1, max 3). CDB/PTHash/text indexes are rejected.
 - **`--upper`**: uppercase each survivor; if both `--lower` and `--upper` are set, `--upper` wins.
 - **`--reverse`**: reverse character order within each survivor (after case transforms).
 - **`--prefix` / `--suffix`**: keep survivors that start/end with the given string (after transforms; empty = off).

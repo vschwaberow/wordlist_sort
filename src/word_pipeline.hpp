@@ -62,6 +62,7 @@ struct Options
     bool check_sorted = false;
     bool ignore_case = false;
     bool recursive = false;
+    bool fuzzy = false;
     bool force = false;
     bool skip_comments = false;
     bool append = false;
@@ -76,6 +77,8 @@ struct Options
     int sample_n = 0;
     /// 1-based field cut; 0 = off.
     int field = 0;
+    /// Max Levenshtein distance for --fuzzy (0..3; default 1 when fuzzy).
+    int distance = 1;
     std::string delimiter = "	";
     std::string tmp_dir;
     std::string prefix;

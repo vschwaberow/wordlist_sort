@@ -53,6 +53,10 @@ enum class ExportFormat
 [[nodiscard]] std::expected<bool, std::string> fst_contains(const std::filesystem::path &path,
                                                             std::string_view key);
 
+/// Bounded Levenshtein search on WLTRIE1; returns sorted unique matches (max_distance 0..3).
+[[nodiscard]] std::expected<std::vector<std::string>, std::string>
+fst_fuzzy_search_bytes(std::span<const unsigned char> data, std::string_view query, int max_distance);
+
 /// Exact-key probe against an already-loaded DJB CDB buffer.
 [[nodiscard]] std::expected<bool, std::string> cdb_contains_bytes(std::span<const unsigned char> data,
                                                                   std::string_view key);

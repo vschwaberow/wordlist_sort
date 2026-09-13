@@ -821,3 +821,48 @@ TEST(E2eCli, LookupMutuallyExclusive)
                                                 shell_quote(input.string()));
     EXPECT_NE(result.exit_code, 0);
 }
+
+TEST(E2eCli, FuzzyLookupFst)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path dict = work / "dict.txt";
+    const fs::path index = work / "dict.fst";
+    const fs::path queries = work / "queries.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(dict, "cat\ncot\ndog\n");
+    test_helpers::write_text_file(queries, "cet\n");
+
+    const auto build = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                 " -q --format=fst --sort --deduplicate " +
+                                                 shell_quote(index.string()) + " " +
+                                                 shell_quote(dict.string()));
+    EXPECT_EQ(build.exit_code, 0) << build.stderr_text;
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --lookup " + shell_quote(index.string()) +
+                                                " --fuzzy --distance 1 --sort -o " +
+                                                shell_quote(output.string()) + " " +
+                                                shell_quote(queries.string()));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(output), "cat\ncot\n");
+}
+
+TEST(E2eCli, FuzzyRequiresFstLookup)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path dict = work / "dict.txt";
+    const fs::path index = work / "dict.cdb";
+    const fs::path queries = work / "queries.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(dict, "a\n");
+    test_helpers::write_text_file(queries, "a\n");
+    const auto build = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                 " -q --format=cdb --sort " + shell_quote(index.string()) +
+                                                 " " + shell_quote(dict.string()));
+    EXPECT_EQ(build.exit_code, 0) << build.stderr_text;
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --lookup " + shell_quote(index.string()) +
+                                                " --fuzzy -o " + shell_quote(output.string()) + " " +
+                                                shell_quote(queries.string()));
+    EXPECT_NE(result.exit_code, 0);
+}
