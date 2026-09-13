@@ -285,7 +285,8 @@ void remove_run_files(const std::vector<std::filesystem::path> &run_paths)
 
 void sort_and_deduplicate_words_external(std::vector<std::string> &words,
                                          const SortDedupPlan &plan,
-                                         const std::size_t chunk_words)
+                                         const std::size_t chunk_words,
+                                         const bool quiet)
 {
     if (chunk_words == 0 || words.size() <= chunk_words)
     {
@@ -325,12 +326,14 @@ void sort_and_deduplicate_words_external(std::vector<std::string> &words,
     merge_run_files(run_paths, plan, words);
     remove_run_files(run_paths);
 
-    std::println("External sort: {} run file(s), chunk={}, resulting words={}.",
-                 run_paths.size(), chunk_words, words.size());
+    if (!quiet)
+        std::println("External sort: {} run file(s), chunk={}, resulting words={}.",
+                     run_paths.size(), chunk_words, words.size());
 }
 
-ExternalSortBuilder::ExternalSortBuilder(const SortDedupPlan plan, const std::size_t chunk_words)
-    : plan_(plan), chunk_words_(chunk_words == 0 ? 1 : chunk_words)
+ExternalSortBuilder::ExternalSortBuilder(const SortDedupPlan plan, const std::size_t chunk_words,
+                                           const bool quiet)
+    : plan_(plan), chunk_words_(chunk_words == 0 ? 1 : chunk_words), quiet_(quiet)
 {
     buffer_.reserve(chunk_words_);
 }
@@ -400,8 +403,9 @@ void ExternalSortBuilder::finish(std::vector<std::string> &out)
         sort_and_deduplicate_words_cpu(out, plan_);
     }
 
-    std::println("External sort (ingest flush): {} run file(s), chunk={}, pushed={}, resulting words={}.",
-                 paths.size(), chunk_words_, pushed_, out.size());
+    if (!quiet_)
+        std::println("External sort (ingest flush): {} run file(s), chunk={}, pushed={}, resulting words={}.",
+                     paths.size(), chunk_words_, pushed_, out.size());
     run_paths_.clear();
 }
 
@@ -417,8 +421,9 @@ std::size_t ExternalSortBuilder::finish_to_stream(std::ostream &out)
             out << word << '\n';
         const auto n = buffer_.size();
         buffer_.clear();
-        std::println("External sort (ingest flush → stream): 0 run file(s), chunk={}, pushed={}, resulting words={}.",
-                     chunk_words_, pushed_, n);
+        if (!quiet_)
+            std::println("External sort (ingest flush → stream): 0 run file(s), chunk={}, pushed={}, resulting words={}.",
+                         chunk_words_, pushed_, n);
         return n;
     }
 
@@ -444,8 +449,9 @@ std::size_t ExternalSortBuilder::finish_to_stream(std::ostream &out)
         buffer_.clear();
     }
 
-    std::println("External sort (ingest flush → stream): {} run file(s), chunk={}, pushed={}, resulting words={}.",
-                 paths.size(), chunk_words_, pushed_, written);
+    if (!quiet_)
+        std::println("External sort (ingest flush → stream): {} run file(s), chunk={}, pushed={}, resulting words={}.",
+                     paths.size(), chunk_words_, pushed_, written);
     run_paths_.clear();
     return written;
 }
@@ -486,7 +492,7 @@ void sort_and_deduplicate_words(std::vector<std::string> &words, const SortDedup
     }
 
     if (options.sort_chunk > 0 && words.size() > options.sort_chunk)
-        sort_and_deduplicate_words_external(words, plan, options.sort_chunk);
+        sort_and_deduplicate_words_external(words, plan, options.sort_chunk, options.quiet);
     else
         sort_and_deduplicate_words_cpu(words, plan);
 }
