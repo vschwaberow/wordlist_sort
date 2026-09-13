@@ -75,7 +75,8 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `-o`, `--output <file>` | Output path or `-` for stdout (alternative to positional `<output>`; then all positionals are inputs) |
 | `--exclude <file>` | Drop words that occur in FILE (set difference A\\B) |
 | `--intersect <file>` | Keep only words that also occur in FILE (A∩B) |
-| `--filter-engine <str>` | Membership backend for exclude/intersect: `hash` (default), `fst`, `pthash` |
+| `--lookup <index>` | Keep words present in INDEX (`.cdb`/`.fst`/`.pthash` or text+engine) |
+| `--filter-engine <str>` | Membership backend for exclude/intersect/lookup text indexes: `hash` (default), `fst`, `pthash` |
 
 ### Flags
 
@@ -162,7 +163,7 @@ B may be a plain text wordlist **or** a previously exported index:
 | `text` (default) | One word per line (existing behavior) |
 | `cdb` | DJB **Constant Database** (tinycdb-compatible). Each word is a key with an empty value. Classic CDB 4 GiB limit. Duplicate keys: first wins. |
 | `fst` | Compact **prefix trie** on disk (`WLTRIE1`). Exact membership lookups; shared prefixes. Duplicate keys: first wins. |
-| `pthash` | **WLPTH1** container: PTHash MPHF + key table (needs `WORDLIST_SORT_PTHASH`). Reusable as `--exclude`/`--intersect` without rebuild. |
+| `pthash` | **WLPTH1** container: PTHash MPHF + key table (needs `WORDLIST_SORT_PTHASH`). Reusable as `--exclude`/`--intersect`/`--lookup` without rebuild. |
 
 ```bash
 ./build/wordlist_sort --sort --deduplicate --format=cdb words.cdb list.txt

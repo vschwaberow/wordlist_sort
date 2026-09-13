@@ -124,7 +124,8 @@ constexpr std::array str_opt_specs{
     StrOptSpec{"--format", &Options::format, "Output format: text (default), cdb, fst (WLTRIE1), pthash (WLPTH1)"},
     StrOptSpec{"--exclude", &Options::exclude_path, "Drop words present in FILE (set difference A\\B)"},
     StrOptSpec{"--intersect", &Options::intersect_path, "Keep only words also present in FILE (A∩B)"},
-    StrOptSpec{"--filter-engine", &Options::filter_engine, "Membership engine for --exclude/--intersect: hash (default), fst, pthash"},
+    StrOptSpec{"--lookup", &Options::lookup_path, "Keep words present in INDEX (.cdb/.fst/.pthash or text+--filter-engine)"},
+    StrOptSpec{"--filter-engine", &Options::filter_engine, "Membership engine for --exclude/--intersect/--lookup text indexes: hash (default), fst, pthash"},
     StrOptSpec{"--output", &Options::output_override, "Output path or - for stdout (alternative to positional <output>)"},
     StrOptSpec{"-o", &Options::output_override, "Short form of --output"},
     StrOptSpec{"--tmp-dir", &Options::tmp_dir, "Directory for external-sort / filter temp files (default: system temp)"},
@@ -492,15 +493,17 @@ int main(const int argc, char *argv[])
         std::println();
     }
 
-    if (!args.options.exclude_path.empty() && !args.options.intersect_path.empty())
+    const int membership_modes =
+        (!args.options.exclude_path.empty() ? 1 : 0) + (!args.options.intersect_path.empty() ? 1 : 0) +
+        (!args.options.lookup_path.empty() ? 1 : 0);
+    if (membership_modes > 1)
     {
-        std::println(stderr, "Error: --exclude and --intersect are mutually exclusive");
+        std::println(stderr, "Error: --exclude, --intersect, and --lookup are mutually exclusive");
         return 1;
     }
 
     std::unique_ptr<MembershipFilter> membership_filter;
-    const bool use_membership =
-        !args.options.exclude_path.empty() || !args.options.intersect_path.empty();
+    const bool use_membership = membership_modes == 1;
     if (use_membership)
     {
         const auto engine = parse_filter_engine(args.options.filter_engine);
@@ -510,9 +513,10 @@ int main(const int argc, char *argv[])
             return 1;
         }
 
-        const std::filesystem::path filter_path = !args.options.exclude_path.empty()
-                                                      ? args.options.exclude_path
-                                                      : args.options.intersect_path;
+        const std::filesystem::path filter_path = !args.options.exclude_path.empty() ? args.options.exclude_path
+                                                 : !args.options.intersect_path.empty()
+                                                       ? args.options.intersect_path
+                                                       : args.options.lookup_path;
         auto filter = open_membership_filter(filter_path, *engine, tmp_dir_path);
         if (!filter)
         {
@@ -524,9 +528,13 @@ int main(const int argc, char *argv[])
         args.options.membership = membership_filter.get();
         args.options.membership_exclude = !args.options.exclude_path.empty();
         if (!args.options.quiet)
-            std::println("Built {} filter via {} ({} keys); streaming inputs with early drop.",
-                         args.options.membership_exclude ? "exclude" : "intersect",
+        {
+            const char *mode = args.options.membership_exclude                          ? "exclude"
+                               : !args.options.lookup_path.empty()                      ? "lookup"
+                                                                                        : "intersect";
+            std::println("Built {} filter via {} ({} keys); streaming inputs with early drop.", mode,
                          membership_filter->backend_name(), membership_filter->size());
+        }
     }
 
     const auto format = parse_export_format(args.options.format);

@@ -781,3 +781,43 @@ TEST(E2eCli, CompressStdoutRequiresDash)
                                                 shell_quote(input.string()));
     EXPECT_NE(result.exit_code, 0);
 }
+
+TEST(E2eCli, LookupCdbIndex)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path dict = work / "dict.txt";
+    const fs::path index = work / "dict.cdb";
+    const fs::path queries = work / "queries.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(dict, "alpha\nbeta\ngamma\n");
+    test_helpers::write_text_file(queries, "beta\nzeta\nalpha\n");
+
+    const auto build = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                 " -q --format=cdb --sort --deduplicate " +
+                                                 shell_quote(index.string()) + " " +
+                                                 shell_quote(dict.string()));
+    EXPECT_EQ(build.exit_code, 0) << build.stderr_text;
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --lookup " + shell_quote(index.string()) +
+                                                " --sort -o " + shell_quote(output.string()) + " " +
+                                                shell_quote(queries.string()));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(output), "alpha\nbeta\n");
+}
+
+TEST(E2eCli, LookupMutuallyExclusive)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    const fs::path other = work / "other.txt";
+    test_helpers::write_text_file(input, "a\n");
+    test_helpers::write_text_file(other, "a\n");
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --lookup " + shell_quote(other.string()) +
+                                                " --intersect " + shell_quote(other.string()) +
+                                                " -o " + shell_quote(output.string()) + " " +
+                                                shell_quote(input.string()));
+    EXPECT_NE(result.exit_code, 0);
+}
