@@ -86,6 +86,7 @@ struct Options
     std::string format = "text";
     std::string exclude_path;
     std::string intersect_path;
+    std::string lookup_path;
     std::string filter_engine = "hash";
     std::string output_override;
     const MembershipFilter *membership = nullptr;
