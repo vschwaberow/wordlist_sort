@@ -78,7 +78,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--hash-remove` | Discard hex hashes (≥32 hex chars) |
 | `--email-sort` | Convert `user@domain.com` → `user domain` |
 | `--dewebify` | Strip HTML tags |
-| `--noutf8` | Keep only ASCII (0–127); effective only with `--dewebify` |
+| `--noutf8` | Keep only ASCII (0–127); applied per input line |
 | `--sort` | Sort output lexicographically |
 | `--deduplicate` | Remove duplicate words (forces sort if not already set) |
 | `--cuda` | Prefer GPU sort/dedup when built with CUDA and word count ≥ `--cuda-threshold` |
@@ -157,7 +157,7 @@ CUDA example (CUDA build required):
 ## Performance
 
 - **Parallel:** each input file processed in its own `std::async` task
-- **Bulk I/O:** each input file is read fully into a `std::vector<char>` (no `mmap` / memory-mapped I/O)
+- **Line I/O:** inputs are streamed with `getline` (no `mmap`; no full-file `vector<char>` on the ingest path)
 - **Dedup:** `--deduplicate` uses `std::ranges::sort` + `std::unique` + erase (not `unordered_set`)
 - **Ranges:** lazy transforms via `std::ranges`
 - **Move semantics:** per-task results moved into output without copying

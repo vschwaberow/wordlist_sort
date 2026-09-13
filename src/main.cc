@@ -73,7 +73,7 @@ constexpr std::array flag_specs{
     FlagSpec{"--hash-remove",  &Options::hash_remove,  "Filter out word candidates that are hex hashes (>=32 hex chars)"},
     FlagSpec{"--email-sort",   &Options::email_sort,   "Convert 'user@domain.com' to 'user domain' output"},
     FlagSpec{"--dewebify",     &Options::dewebify,     "Extract text from HTML input (strips tags)"},
-    FlagSpec{"--noutf8",       &Options::noutf8,       "Process to keep only ASCII characters (0-127)"},
+    FlagSpec{"--noutf8",       &Options::noutf8,       "Keep only ASCII characters (0-127) on each input line"},
     FlagSpec{"--sort",         &Options::sort,         "Sort the output words lexicographically"},
     FlagSpec{"--deduplicate",  &Options::deduplicate,  "Remove duplicate words from the final output list"},
     FlagSpec{"--cuda",         &Options::cuda,         "Use GPU for sort/dedup when built with CUDA and word count exceeds threshold"},
