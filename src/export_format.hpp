@@ -30,7 +30,8 @@ enum class ExportFormat
 /// Duplicate keys: first occurrence wins (later duplicates skipped).
 [[nodiscard]] std::expected<void, std::string> write_export(const std::vector<std::string> &words,
                                                             const std::filesystem::path &path,
-                                                            ExportFormat format);
+                                                            ExportFormat format,
+                                                            bool append = false);
 
 [[nodiscard]] std::expected<void, std::string> write_cdb(const std::vector<std::string> &words,
                                                          const std::filesystem::path &path);

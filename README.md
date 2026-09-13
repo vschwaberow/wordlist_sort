@@ -95,6 +95,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--progress` | Print ingest progress to stderr (avg + recent words/sec) |
 | `-f`, `--force` | Overwrite an existing output file (refused by default) |
 | `--skip-comments` | Ignore lines whose first non-whitespace character is `#` |
+| `--append` | Append text output to an existing file instead of truncating (text only; no `--force` needed) |
 | `-q`, `--quiet` | Suppress informational stdout (errors/warnings still print) |
 
 Without a CUDA build, `--cuda` prints a note and uses the CPU path. If a CUDA run fails at runtime, the tool falls back to CPU with a warning.

@@ -196,7 +196,7 @@ void trim_special_inplace(std::string &str) noexcept
 }
 
 [[nodiscard]] std::expected<void, std::string> write_lines(const std::vector<std::string> &words,
-                                                           const fs::path &path)
+                                                           const fs::path &path, const bool append)
 {
     if (is_stdio_path(path))
     {
@@ -209,7 +209,8 @@ void trim_special_inplace(std::string &str) noexcept
         return {};
     }
 
-    std::ofstream out(path);
+    const auto mode = std::ios::binary | (append ? std::ios::app : std::ios::trunc);
+    std::ofstream out(path, mode);
     if (!out)
         return std::unexpected(std::format("Failed to open output file for writing: {}", path.string()));
 
