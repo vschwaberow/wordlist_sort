@@ -121,3 +121,29 @@ TEST(WordPipeline, DewebifyAndNoUtf8InFile)
     ASSERT_EQ(words.size(), 1U);
     EXPECT_EQ(words.front(), "caf");
 }
+
+TEST(WordPipeline, JobsCapStillProcesses)
+{
+    const auto dir = test_helpers::make_temp_dir();
+    std::filesystem::create_directories(dir);
+    const auto a = dir / "a.txt";
+    const auto b = dir / "b.txt";
+    {
+        std::ofstream out(a);
+        out << "one\n";
+    }
+    {
+        std::ofstream out(b);
+        out << "two\n";
+    }
+
+    Options options;
+    options.jobs = 1;
+    std::vector<std::string> words;
+    std::atomic<std::size_t> counter{0};
+    ASSERT_TRUE(process_multiple_files_parallel({a, b}, words, counter, options));
+    ASSERT_EQ(words.size(), 2u);
+    std::sort(words.begin(), words.end());
+    EXPECT_EQ(words[0], "one");
+    EXPECT_EQ(words[1], "two");
+}

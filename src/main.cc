@@ -87,6 +87,7 @@ constexpr std::array int_opt_specs{
     IntOptSpec{"--minlen",         &Options::minlen,         "Filter out words below a certain min length (chars)"},
     IntOptSpec{"--dup-sense",      &Options::dup_sense,      "Remove word if any single char is more than <N>% of the word (0-100)"},
     IntOptSpec{"--cuda-threshold", &Options::cuda_threshold, "Min words for GPU sort/dedup (0=auto heuristic ~100k; requires --cuda)"},
+    IntOptSpec{"--jobs", &Options::jobs, "Parallel input workers (omit=auto CPU count, 0=unlimited, >0=cap)"},
 };
 
 constexpr std::array str_opt_specs{

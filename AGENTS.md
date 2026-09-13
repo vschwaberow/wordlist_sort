@@ -103,7 +103,8 @@ These are behaviors not clearly documented and easy to get wrong:
 - **Positional order: OUTPUT first, then inputs.** Positional parsing registers output before inputs. Usage is `wordlist_sort <out> <in1> [in2 ...]`, opposite of most CLIs.
 - **`--noutf8` only does anything when combined with `--dewebify`.** The non-ASCII (>127) stripping lives inside the `if (options.dewebify)` block in `process_file`. Alone, `--noutf8` has no effect.
 - **`--deduplicate` silently forces a sort** even without `--sort`, and prints a note to stdout. Dedup requires sorted input (`std::unique` only removes *consecutive* duplicates).
-- **Threading is one `std::async` task per input file** (`std::launch::async`), with no thread pool or concurrency cap. Passing hundreds of files spawns hundreds of threads. Each task streams its file line-by-line; peak RAM scales with survivor words (plus B filter when set filters are used), not full concurrent file sizes.
+- **Threading is one `std::async` task per input file** (`std::launch::async`), with no thread pool or concurrency cap. Default (omit `--jobs`) caps concurrency at `hardware_concurrency` via a counting semaphore; `--jobs 0` restores unlimited one-task-per-file. Each task streams its file line-by-line.
+- **`--jobs`**: omit = auto CPU count (default), `0` unlimited, `>0` cap.
 - **`--cuda` / `--no-cuda` / `--cuda-threshold`**: GPU sort/dedup (compile-time optional via `-DWORDLIST_SORT_CUDA=ON`). See gotcha §6.
 - **`--exclude` / `--intersect` / `--filter-engine`**: build/open B filter first, then stream A with early drop; text B uses `hash|fst|pthash`; WLTRIE1/`*.cdb` opened as in-memory indexes (`open_membership_filter`).
 - **`--format text|cdb|fst|pthash`**: output encoder after sort/dedup (`cdb` = DJB CDB, `fst` = WLTRIE1, `pthash` = WLPTH1 MPHF+keys). Duplicate keys keep the first occurrence.
