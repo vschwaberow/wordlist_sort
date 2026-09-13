@@ -230,7 +230,7 @@ void merge_run_files(const std::vector<std::filesystem::path> &run_paths,
 
 [[nodiscard]] std::size_t merge_run_files_to_stream(const std::vector<std::filesystem::path> &run_paths,
                                                     const SortDedupPlan &plan,
-                                                    std::ostream &out)
+                                                    std::ostream &out, const char record_sep)
 {
     if (run_paths.empty())
         return 0;
@@ -269,7 +269,7 @@ void merge_run_files(const std::vector<std::filesystem::path> &run_paths,
         auto &reader = readers[top.run];
         if (!(plan.perform_deduplicate && have_last && reader.current == last))
         {
-            out << reader.current << '\n';
+            out << reader.current << record_sep;
             last = reader.current;
             have_last = true;
             ++written;
@@ -417,7 +417,7 @@ void ExternalSortBuilder::finish(std::vector<std::string> &out)
     run_paths_.clear();
 }
 
-std::size_t ExternalSortBuilder::finish_to_stream(std::ostream &out)
+std::size_t ExternalSortBuilder::finish_to_stream(std::ostream &out, const char record_sep)
 {
     std::lock_guard lock(mutex_);
     announce_implicit_sort_if_needed(plan_);
@@ -426,7 +426,7 @@ std::size_t ExternalSortBuilder::finish_to_stream(std::ostream &out)
     {
         sort_and_deduplicate_words_cpu(buffer_, plan_);
         for (const auto &word : buffer_)
-            out << word << '\n';
+            out << word << record_sep;
         const auto n = buffer_.size();
         buffer_.clear();
         if (!quiet_)
@@ -443,7 +443,7 @@ std::size_t ExternalSortBuilder::finish_to_stream(std::ostream &out)
     for (const auto &p : run_paths_)
         paths.emplace_back(p);
 
-    std::size_t written = merge_run_files_to_stream(paths, plan_, out);
+    std::size_t written = merge_run_files_to_stream(paths, plan_, out, record_sep);
     remove_run_files(paths);
 
     if (!buffer_.empty())
@@ -451,7 +451,7 @@ std::size_t ExternalSortBuilder::finish_to_stream(std::ostream &out)
         sort_and_deduplicate_words_cpu(buffer_, plan_);
         for (const auto &word : buffer_)
         {
-            out << word << '\n';
+            out << word << record_sep;
             ++written;
         }
         buffer_.clear();

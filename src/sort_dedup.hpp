@@ -88,7 +88,7 @@ public:
     /// Flush remaining buffer and k-way merge into `out`.
     void finish(std::vector<std::string> &out);
     /// Flush/merge directly to a text stream (one word per line); returns lines written.
-    [[nodiscard]] std::size_t finish_to_stream(std::ostream &out);
+    [[nodiscard]] std::size_t finish_to_stream(std::ostream &out, char record_sep = '\n');
     [[nodiscard]] std::size_t pushed() const noexcept { return pushed_; }
     [[nodiscard]] std::size_t run_count() const noexcept { return run_paths_.size(); }
 
