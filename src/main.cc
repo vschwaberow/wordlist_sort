@@ -412,6 +412,11 @@ int main(const int argc, char *argv[])
         std::println(stderr, "Error: zstd output (.zst) is only supported with --format=text");
         return 1;
     }
+    if (*format != ExportFormat::Text && path_looks_xz(args.output_path))
+    {
+        std::println(stderr, "Error: xz output (.xz) is only supported with --format=text");
+        return 1;
+    }
 
     const std::size_t stdin_inputs = static_cast<std::size_t>(std::count_if(
         args.input_paths.begin(), args.input_paths.end(),

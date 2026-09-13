@@ -562,6 +562,149 @@ bool XzInputStream::is_open() const noexcept
     return buf_ && buf_->ok();
 }
 
+
+class XzOutputStream::Buf final : public std::streambuf
+{
+  public:
+    Buf(const std::filesystem::path &path, const bool append)
+        : file_(std::fopen(path.string().c_str(), append ? "ab" : "wb")),
+          in_storage_(1 << 16),
+          out_storage_(1 << 16)
+    {
+        if (file_ == nullptr)
+            return;
+        stream_ = LZMA_STREAM_INIT;
+        const lzma_ret ret = lzma_easy_encoder(&stream_, 6, LZMA_CHECK_CRC64);
+        if (ret != LZMA_OK)
+        {
+            close_all();
+            return;
+        }
+        encoder_live_ = true;
+        setp(in_storage_.data(), in_storage_.data() + in_storage_.size());
+        ok_ = true;
+    }
+
+    ~Buf() override { close_all(); }
+
+    [[nodiscard]] bool ok() const noexcept { return ok_; }
+
+  protected:
+    int_type overflow(int_type ch) override
+    {
+        if (!compress_pending(LZMA_RUN))
+            return traits_type::eof();
+        if (traits_type::eq_int_type(ch, traits_type::eof()))
+            return traits_type::not_eof(ch);
+        *pptr() = traits_type::to_char_type(ch);
+        pbump(1);
+        return ch;
+    }
+
+    std::streamsize xsputn(const char *s, std::streamsize n) override
+    {
+        if (!ok_ || n <= 0)
+            return 0;
+        std::streamsize done = 0;
+        while (done < n)
+        {
+            const auto space = epptr() - pptr();
+            if (space == 0)
+            {
+                if (!compress_pending(LZMA_RUN))
+                    return done;
+                continue;
+            }
+            const auto chunk = std::min<std::streamsize>(n - done, space);
+            std::memcpy(pptr(), s + done, static_cast<std::size_t>(chunk));
+            pbump(static_cast<int>(chunk));
+            done += chunk;
+        }
+        return done;
+    }
+
+    int sync() override
+    {
+        return compress_pending(LZMA_FULL_FLUSH) ? 0 : -1;
+    }
+
+  private:
+    [[nodiscard]] bool compress_pending(const lzma_action action)
+    {
+        if (!ok_)
+            return false;
+        const auto pending = static_cast<std::size_t>(pptr() - pbase());
+        stream_.next_in = reinterpret_cast<uint8_t *>(pbase());
+        stream_.avail_in = pending;
+
+        lzma_ret ret = LZMA_OK;
+        while (stream_.avail_in > 0 || action != LZMA_RUN)
+        {
+            stream_.next_out = reinterpret_cast<uint8_t *>(out_storage_.data());
+            stream_.avail_out = out_storage_.size();
+            ret = lzma_code(&stream_, action);
+            const std::size_t produced = out_storage_.size() - stream_.avail_out;
+            if (produced > 0)
+            {
+                if (std::fwrite(out_storage_.data(), 1, produced, file_) != produced)
+                    return false;
+            }
+            if (ret == LZMA_STREAM_END)
+                break;
+            if (ret != LZMA_OK)
+                return false;
+            if (action == LZMA_RUN && stream_.avail_in == 0)
+                break;
+            if (action == LZMA_FULL_FLUSH && stream_.avail_in == 0 && produced == 0)
+                break;
+        }
+        if (pending > 0)
+            pbump(-static_cast<int>(pending));
+        return true;
+    }
+
+    void close_all()
+    {
+        if (ok_ && encoder_live_ && file_ != nullptr)
+            static_cast<void>(compress_pending(LZMA_FINISH));
+        if (encoder_live_)
+        {
+            lzma_end(&stream_);
+            encoder_live_ = false;
+        }
+        stream_ = LZMA_STREAM_INIT;
+        if (file_ != nullptr)
+        {
+            std::fclose(file_);
+            file_ = nullptr;
+        }
+        ok_ = false;
+    }
+
+    FILE *file_ = nullptr;
+    lzma_stream stream_ = LZMA_STREAM_INIT;
+    std::vector<char> in_storage_;
+    std::vector<char> out_storage_;
+    bool encoder_live_ = false;
+    bool ok_ = false;
+};
+
+XzOutputStream::XzOutputStream(const std::filesystem::path &path, const bool append)
+    : std::ostream(nullptr), buf_(std::make_unique<Buf>(path, append))
+{
+    rdbuf(buf_.get());
+    if (!buf_->ok())
+        setstate(std::ios::failbit);
+}
+
+XzOutputStream::~XzOutputStream() = default;
+
+bool XzOutputStream::is_open() const noexcept
+{
+    return buf_ && buf_->ok();
+}
+
+
 #endif
 
 #if defined(WORDLIST_SORT_LZ4)
@@ -867,6 +1010,24 @@ enum class CompressionKind
 #else
         if (error_out)
             *error_out = "zstd output requires a build with libzstd (WORDLIST_SORT_ZSTD)";
+        return nullptr;
+#endif
+    }
+
+    if (path_looks_xz(path))
+    {
+#if defined(WORDLIST_SORT_LZMA)
+        auto xz = std::make_unique<XzOutputStream>(path, append);
+        if (!xz->is_open())
+        {
+            if (error_out)
+                *error_out = "Unable to open xz output file: " + path.string();
+            return nullptr;
+        }
+        return xz;
+#else
+        if (error_out)
+            *error_out = "xz output requires a build with liblzma (WORDLIST_SORT_LZMA)";
         return nullptr;
 #endif
     }
