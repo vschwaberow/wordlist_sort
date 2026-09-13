@@ -96,6 +96,8 @@ constexpr std::array str_opt_specs{
     StrOptSpec{"--exclude", &Options::exclude_path, "Drop words present in FILE (set difference A\\B)"},
     StrOptSpec{"--intersect", &Options::intersect_path, "Keep only words also present in FILE (A∩B)"},
     StrOptSpec{"--filter-engine", &Options::filter_engine, "Membership engine for --exclude/--intersect: hash (default), fst, pthash"},
+    StrOptSpec{"--output", &Options::output_override, "Output file path (alternative to positional <output>)"},
+    StrOptSpec{"-o", &Options::output_override, "Short form of --output"},
 };
 
 constexpr std::size_t compute_help_col_width()
@@ -134,11 +136,12 @@ void print_version()
 void print_usage()
 {
     std::println("Usage: {} [OPTIONS] <output> <input> [input ...]", PROGRAM_NAME);
+    std::println("   or: {} [OPTIONS] -o <output> <input> [input ...]", PROGRAM_NAME);
     std::println();
     std::println("A high-performance tool for processing, filtering, and sorting wordlists.");
     std::println();
     std::println("Arguments:");
-    std::println("  {:{}}  Output file path", "<output>", help_col_width);
+    std::println("  {:{}}  Output file path (or use -o/--output)", "<output>", help_col_width);
     std::println("  {:{}}  Input file path(s) (at least one required)", "<input> ...", help_col_width);
     std::println();
     std::println("Options:");
@@ -252,14 +255,24 @@ using ParseResult = std::expected<std::optional<ParsedArgs>, std::string>;
         positionals.emplace_back(arg);
     }
 
-    if (positionals.empty())
-        return std::unexpected("Missing required argument: <output>");
-    if (positionals.size() < 2)
-        return std::unexpected("Missing required argument: <input>");
-
-    result.output_path = positionals[0];
-    for (std::size_t i = 1; i < positionals.size(); ++i)
-        result.input_paths.emplace_back(positionals[i]);
+    if (!result.options.output_override.empty())
+    {
+        if (positionals.empty())
+            return std::unexpected("Missing required argument: <input>");
+        result.output_path = result.options.output_override;
+        for (const auto &p : positionals)
+            result.input_paths.emplace_back(p);
+    }
+    else
+    {
+        if (positionals.empty())
+            return std::unexpected("Missing required argument: <output>");
+        if (positionals.size() < 2)
+            return std::unexpected("Missing required argument: <input>");
+        result.output_path = positionals[0];
+        for (std::size_t i = 1; i < positionals.size(); ++i)
+            result.input_paths.emplace_back(positionals[i]);
+    }
 
     return std::optional{std::move(result)};
 }

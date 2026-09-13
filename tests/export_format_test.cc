@@ -7,6 +7,7 @@
 #include "test_helpers.hpp"
 
 #include <gtest/gtest.h>
+#include <fstream>
 #include <vector>
 
 TEST(ExportFormatParse, AcceptsAliases)
@@ -70,3 +71,22 @@ TEST(PthashExport, RoundTripOpenFilter)
     EXPECT_FALSE((*filter)->contains("gamma"));
 }
 #endif
+
+TEST(CdbExport, KeyCountMatchesUniques)
+{
+    const auto dir = test_helpers::make_temp_dir();
+    std::filesystem::create_directories(dir);
+    const auto path = dir / "words.cdb";
+    const std::vector<std::string> words{"a", "b", "a", "c"};
+    ASSERT_TRUE(write_cdb(words, path));
+
+    std::ifstream in(path, std::ios::binary);
+    ASSERT_TRUE(in);
+    in.seekg(0, std::ios::end);
+    const auto n = static_cast<std::size_t>(in.tellg());
+    in.seekg(0);
+    std::vector<unsigned char> data(n);
+    in.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(n));
+    ASSERT_TRUE(cdb_key_count(data));
+    EXPECT_EQ(*cdb_key_count(data), 3u);
+}

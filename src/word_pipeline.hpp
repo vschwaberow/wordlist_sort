@@ -51,6 +51,7 @@ struct Options
     std::string exclude_path;
     std::string intersect_path;
     std::string filter_engine = "hash";
+    std::string output_override;
     const MembershipFilter *membership = nullptr;
     bool membership_exclude = true;
     /// When set, survivors are written here instead of buffered in memory (text path).
