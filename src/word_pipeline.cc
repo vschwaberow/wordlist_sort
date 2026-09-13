@@ -5,6 +5,7 @@
 // Copyright (c) 2026 Volker Schwaberow
 
 #include "word_pipeline.hpp"
+#include "gzip_stream.hpp"
 #include "membership_filter.hpp"
 #include "sort_dedup.hpp"
 
@@ -14,6 +15,7 @@
 #include <fstream>
 #include <iostream>
 #include <future>
+#include <memory>
 #include <mutex>
 #include <semaphore>
 #include <thread>
@@ -225,7 +227,7 @@ void trim_special_inplace(std::string &str) noexcept
                                 std::atomic<std::size_t> &total_words_processed_counter,
                                 const Options &options)
 {
-    std::ifstream file;
+    std::unique_ptr<std::istream> owned_in;
     std::istream *in = nullptr;
     if (is_stdio_path(path))
     {
@@ -233,13 +235,14 @@ void trim_special_inplace(std::string &str) noexcept
     }
     else
     {
-        file.open(path, std::ios::binary);
-        if (!file)
+        std::string open_error;
+        owned_in = open_input_stream(path, &open_error);
+        if (!owned_in)
         {
-            std::println(stderr, "Error: Unable to open file: {}", path.string());
+            std::println(stderr, "Error: {}", open_error);
             return false;
         }
-        in = &file;
+        in = owned_in.get();
     }
 
     const auto try_add_word = [&](const std::string_view candidate)

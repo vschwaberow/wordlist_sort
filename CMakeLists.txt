@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 project(wordlist_sort LANGUAGES CXX)
 
 set(PROJECT_NAME "wordlist_sort")
-set(PROJECT_VERSION "0.19.0")
+set(PROJECT_VERSION "0.4.0")
 set(PROJECT_AUTHOR "Volker Schwaberow <volker@schwaberow.de>")
 set(PROJECT_COPYRIGHT "Copyright (c) 2024-2026 Volker Schwaberow")
 
@@ -46,6 +46,7 @@ option(WORDLIST_SORT_BUILD_TESTS "Build GoogleTest suite and register CTest targ
 option(WORDLIST_SORT_BUILD_BENCHMARKS "Build sort/dedup CPU baseline benchmark harness" ON)
 option(WORDLIST_SORT_NATIVE_ARCH "Add -march=native on GCC/Clang (non-portable)" OFF)
 option(WORDLIST_SORT_PTHASH "Enable PTHash membership engine for --exclude/--intersect" ON)
+option(WORDLIST_SORT_ZLIB "Enable transparent gzip (.gz) input via zlib" ON)
 
 set(WORDLIST_SORT_CORE_SOURCES
     src/word_pipeline.cc
@@ -53,13 +54,20 @@ set(WORDLIST_SORT_CORE_SOURCES
     src/export_format.cc
     src/cdb_export.cc
     src/fst_export.cc
-    src/membership_filter.cc)
+    src/membership_filter.cc
+    src/gzip_stream.cc)
 
 add_executable(wordlist_sort
     src/main.cc
     ${WORDLIST_SORT_CORE_SOURCES})
 
 target_include_directories(wordlist_sort PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+if(WORDLIST_SORT_ZLIB)
+    find_package(ZLIB REQUIRED)
+    target_link_libraries(wordlist_sort PRIVATE ZLIB::ZLIB)
+    target_compile_definitions(wordlist_sort PRIVATE WORDLIST_SORT_ZLIB=1)
+endif()
 
 if(WORDLIST_SORT_PTHASH)
     include(FetchContent)

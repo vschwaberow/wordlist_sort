@@ -11,6 +11,7 @@ endfunction()
 
 set(WORDLIST_SORT_SORT_DEDUP_CPU ${CMAKE_SOURCE_DIR}/src/sort_dedup_cpu.cc)
 set(WORDLIST_SORT_PIPELINE ${CMAKE_SOURCE_DIR}/src/word_pipeline.cc)
+set(WORDLIST_SORT_GZIP ${CMAKE_SOURCE_DIR}/src/gzip_stream.cc)
 
 wordlist_sort_add_cxx_test(sort_dedup_test
     sort_dedup_test.cc
@@ -20,6 +21,7 @@ wordlist_sort_add_cxx_test(sort_dedup_test
 wordlist_sort_add_cxx_test(word_pipeline_test
     word_pipeline_test.cc
     ${WORDLIST_SORT_PIPELINE}
+    ${WORDLIST_SORT_GZIP}
     ${WORDLIST_SORT_SORT_DEDUP_CPU}
     ${CMAKE_SOURCE_DIR}/src/sort_dedup_cuda_stub.cc)
 
@@ -69,6 +71,7 @@ wordlist_sort_add_cxx_test(export_format_test
     ${CMAKE_SOURCE_DIR}/src/fst_export.cc
     ${CMAKE_SOURCE_DIR}/src/membership_filter.cc
     ${WORDLIST_SORT_PIPELINE}
+    ${WORDLIST_SORT_GZIP}
     ${WORDLIST_SORT_SORT_DEDUP_CPU}
     ${CMAKE_SOURCE_DIR}/src/sort_dedup_cuda_stub.cc)
 
@@ -79,6 +82,7 @@ wordlist_sort_add_cxx_test(membership_filter_test
     ${CMAKE_SOURCE_DIR}/src/cdb_export.cc
     ${CMAKE_SOURCE_DIR}/src/fst_export.cc
     ${WORDLIST_SORT_PIPELINE}
+    ${WORDLIST_SORT_GZIP}
     ${WORDLIST_SORT_SORT_DEDUP_CPU}
     ${CMAKE_SOURCE_DIR}/src/sort_dedup_cuda_stub.cc)
 
@@ -90,4 +94,12 @@ if(WORDLIST_SORT_PTHASH)
     endforeach()
     set_source_files_properties(${CMAKE_SOURCE_DIR}/src/membership_filter.cc PROPERTIES
         COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:GNU,Clang>:-Wno-conversion;-Wno-float-conversion;-Wno-unused-but-set-variable;-Wno-error>")
+endif()
+
+if(WORDLIST_SORT_ZLIB)
+    foreach(_t IN ITEMS word_pipeline_test export_format_test membership_filter_test)
+        target_link_libraries(${_t} PRIVATE ZLIB::ZLIB)
+        target_compile_definitions(${_t} PRIVATE WORDLIST_SORT_ZLIB=1)
+    endforeach()
+    target_compile_definitions(e2e_cli_test PRIVATE WORDLIST_SORT_ZLIB=1)
 endif()

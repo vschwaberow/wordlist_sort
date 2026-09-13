@@ -101,6 +101,7 @@ cmake --build build-cuda -j
 These are behaviors not clearly documented and easy to get wrong:
 
 - **Positional order defaults to OUTPUT first**, then inputs (`wordlist_sort <out> <in...>`). Prefer `-o`/`--output` so all positionals are inputs (`wordlist_sort -o out in1 in2`).
+- **`.gz` inputs**: transparent zlib inflate for ingest and text `--exclude`/`--intersect` sources (`WORDLIST_SORT_ZLIB`, default ON). Detected by `.gz` extension or gzip magic; stdin stays raw.
 - **`-` means stdio**: input `-` reads stdin (at most once); output `-` writes `--format=text` to stdout and forces quiet. Non-text formats refuse stdout.
 - **`--noutf8`** strips bytes `>127` on every input line (independent of `--dewebify`).
 - **`--progress`**: ingest ticker on stderr (works with `-q` / stdout `-`; does not write to stdout).
@@ -141,6 +142,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **Prefer `constexpr noexcept` free functions** for byte-classification (`is_digit_char`, `is_alpha_char`, `is_alnum_char`) rather than `<cctype>` — keeps the checks locale-independent and branchless-friendly.
 - **Transformations mutate in place** (`*_inplace` suffix) where possible.
 - **`inline constexpr const char*`** is used (not `constexpr std::string_view`) for the build-metadata globals derived from CMake macros.
+- **Do not bump `PROJECT_VERSION` unless the user explicitly asks.** Version numbers are owner-controlled; feature PRs leave `CMakeLists.txt` `PROJECT_VERSION` unchanged.
 - **Project metadata is injected via `add_definitions(...)`** in `CMakeLists.txt` (the older mechanism), not `target_compile_definitions`. `PROJECT_NAME`/`PROJECT_VERSION`/`PROJECT_AUTHOR`/`PROJECT_COPYRIGHT`/`BUILD_PLATFORM_INFO`/`COMPILER_INFO_STRING` become preprocessor macros. If you add new metadata, follow the same `add_definitions` pattern for consistency.
 
 ## clangd / LSP Setup
