@@ -46,6 +46,7 @@ struct Options
     bool quiet = false;
     bool progress = false;
     bool force = false;
+    bool skip_comments = false;
     int cuda_threshold = 10'000'000;
     /// Parallel input workers: -1 = auto (default; omit --jobs), 0 = unlimited, >0 = cap.
     int jobs = -1;

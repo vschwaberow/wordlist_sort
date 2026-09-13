@@ -303,3 +303,17 @@ TEST(E2eCli, ForceRequiredToOverwrite)
     EXPECT_EQ(test_helpers::read_text_file(output), "a\n");
 }
 
+TEST(E2eCli, SkipComments)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "# header\na\n  # indented\nb\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --skip-comments " + shell_quote(output.string()) + " " +
+                                                shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0);
+    EXPECT_EQ(test_helpers::read_text_file(output), "a\nb\n");
+}
+
