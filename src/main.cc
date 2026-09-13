@@ -327,6 +327,9 @@ int main(const int argc, char *argv[])
     }
 
     const bool stream_text = (*format == ExportFormat::Text) && !args.options.sort && !args.options.deduplicate;
+    const bool want_cuda = args.options.cuda && !args.options.no_cuda;
+    const bool external_ingest = !stream_text && !want_cuda && args.options.sort_chunk > 0 &&
+                                 (args.options.sort || args.options.deduplicate);
 
     const auto start_time = std::chrono::high_resolution_clock::now();
     std::atomic<std::size_t> total_words_processed{0};
@@ -334,6 +337,7 @@ int main(const int argc, char *argv[])
     std::vector<std::string> words;
     std::mutex stream_mutex;
     std::ofstream stream_file;
+    std::optional<ExternalSortBuilder> external_builder;
 
     if (stream_text)
     {
@@ -348,27 +352,44 @@ int main(const int argc, char *argv[])
         args.options.stream_emitted = &streamed_words;
         std::println("Streaming text output (no in-memory word buffer).");
     }
+    else if (external_ingest)
+    {
+        const auto plan = make_sort_dedup_plan(args.options.sort, args.options.deduplicate);
+        external_builder.emplace(plan, static_cast<std::size_t>(args.options.sort_chunk));
+        args.options.external_sort = &(*external_builder);
+        std::println("External sort ingest flush enabled (chunk={}).", args.options.sort_chunk);
+    }
 
     if (!process_multiple_files_parallel(args.input_paths, words, total_words_processed, args.options))
         std::println(stderr, "Warning: One or more files may have failed to process completely.");
 
     if (use_membership)
     {
-        const std::size_t remain = stream_text ? streamed_words.load() : words.size();
+        const std::size_t remain = stream_text ? streamed_words.load()
+                                 : external_ingest ? external_builder->pushed()
+                                                   : words.size();
         std::println("Applied membership filter during ingest → {} words remain.", remain);
     }
 
     if (!stream_text)
     {
-        sort_and_deduplicate_words(words, SortDedupOptions{
-                                               .sort = args.options.sort,
-                                               .deduplicate = args.options.deduplicate,
-                                               .use_cuda = args.options.cuda,
-                                               .no_cuda = args.options.no_cuda,
-                                               .cuda_timing = args.options.cuda_timing,
-                                               .cuda_threshold = static_cast<std::size_t>(args.options.cuda_threshold),
-                                               .sort_chunk = static_cast<std::size_t>(args.options.sort_chunk),
-                                           });
+        if (external_ingest)
+        {
+            external_builder->finish(words);
+            args.options.external_sort = nullptr;
+        }
+        else
+        {
+            sort_and_deduplicate_words(words, SortDedupOptions{
+                                                   .sort = args.options.sort,
+                                                   .deduplicate = args.options.deduplicate,
+                                                   .use_cuda = args.options.cuda,
+                                                   .no_cuda = args.options.no_cuda,
+                                                   .cuda_timing = args.options.cuda_timing,
+                                                   .cuda_threshold = static_cast<std::size_t>(args.options.cuda_threshold),
+                                                   .sort_chunk = static_cast<std::size_t>(args.options.sort_chunk),
+                                               });
+        }
 
         if (const auto write_result = write_export(words, args.output_path, *format); !write_result)
         {

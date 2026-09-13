@@ -19,7 +19,9 @@ wordlist_sort_add_cxx_test(sort_dedup_test
 
 wordlist_sort_add_cxx_test(word_pipeline_test
     word_pipeline_test.cc
-    ${WORDLIST_SORT_PIPELINE})
+    ${WORDLIST_SORT_PIPELINE}
+    ${WORDLIST_SORT_SORT_DEDUP_CPU}
+    ${CMAKE_SOURCE_DIR}/src/sort_dedup_cuda_stub.cc)
 
 wordlist_sort_add_cxx_test(e2e_cli_test
     e2e_cli_test.cc)
@@ -66,7 +68,9 @@ wordlist_sort_add_cxx_test(export_format_test
     ${CMAKE_SOURCE_DIR}/src/cdb_export.cc
     ${CMAKE_SOURCE_DIR}/src/fst_export.cc
     ${CMAKE_SOURCE_DIR}/src/membership_filter.cc
-    ${WORDLIST_SORT_PIPELINE})
+    ${WORDLIST_SORT_PIPELINE}
+    ${WORDLIST_SORT_SORT_DEDUP_CPU}
+    ${CMAKE_SOURCE_DIR}/src/sort_dedup_cuda_stub.cc)
 
 wordlist_sort_add_cxx_test(membership_filter_test
     membership_filter_test.cc
@@ -74,7 +78,9 @@ wordlist_sort_add_cxx_test(membership_filter_test
     ${CMAKE_SOURCE_DIR}/src/export_format.cc
     ${CMAKE_SOURCE_DIR}/src/cdb_export.cc
     ${CMAKE_SOURCE_DIR}/src/fst_export.cc
-    ${WORDLIST_SORT_PIPELINE})
+    ${WORDLIST_SORT_PIPELINE}
+    ${WORDLIST_SORT_SORT_DEDUP_CPU}
+    ${CMAKE_SOURCE_DIR}/src/sort_dedup_cuda_stub.cc)
 
 if(WORDLIST_SORT_PTHASH)
     foreach(_t IN ITEMS membership_filter_test export_format_test)

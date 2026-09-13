@@ -6,6 +6,7 @@
 
 #include "word_pipeline.hpp"
 #include "membership_filter.hpp"
+#include "sort_dedup.hpp"
 
 #include <algorithm>
 #include <array>
@@ -250,6 +251,11 @@ void trim_special_inplace(std::string &str) noexcept
             }
             if (options.stream_emitted != nullptr)
                 options.stream_emitted->fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
+        if (options.external_sort != nullptr)
+        {
+            options.external_sort->push(std::move(*processed));
             return;
         }
         output_words.push_back(std::move(*processed));
