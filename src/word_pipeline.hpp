@@ -81,6 +81,7 @@ struct Options
     std::string prefix;
     std::string suffix;
     std::string regex_pattern;
+    std::string compress;
     const std::regex *regex = nullptr;
     std::string format = "text";
     std::string exclude_path;

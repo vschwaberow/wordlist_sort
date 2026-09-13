@@ -11,11 +11,20 @@
 #include <ostream>
 #include <memory>
 #include <string>
+#include <string_view>
 
 [[nodiscard]] bool path_looks_gzip(const std::filesystem::path &path) noexcept;
 [[nodiscard]] bool path_looks_zstd(const std::filesystem::path &path) noexcept;
 [[nodiscard]] bool path_looks_xz(const std::filesystem::path &path) noexcept;
 [[nodiscard]] bool path_looks_lz4(const std::filesystem::path &path) noexcept;
+
+/// Tag for constructing compressing ostreams that write to stdout (via dup'd fd).
+struct stdout_tag_t
+{
+    explicit stdout_tag_t() = default;
+};
+inline constexpr stdout_tag_t stdout_tag{};
+
 
 #if defined(WORDLIST_SORT_ZLIB)
 
@@ -109,6 +118,7 @@ class GzipOutputStream final : public std::ostream
 {
   public:
     GzipOutputStream(const std::filesystem::path &path, bool append);
+    explicit GzipOutputStream(stdout_tag_t);
     ~GzipOutputStream() override;
 
     GzipOutputStream(const GzipOutputStream &) = delete;
@@ -131,6 +141,7 @@ class ZstdOutputStream final : public std::ostream
 {
   public:
     ZstdOutputStream(const std::filesystem::path &path, bool append);
+    explicit ZstdOutputStream(stdout_tag_t);
     ~ZstdOutputStream() override;
 
     ZstdOutputStream(const ZstdOutputStream &) = delete;
@@ -153,6 +164,7 @@ class XzOutputStream final : public std::ostream
 {
   public:
     XzOutputStream(const std::filesystem::path &path, bool append);
+    explicit XzOutputStream(stdout_tag_t);
     ~XzOutputStream() override;
 
     XzOutputStream(const XzOutputStream &) = delete;
@@ -175,6 +187,7 @@ class Lz4OutputStream final : public std::ostream
 {
   public:
     Lz4OutputStream(const std::filesystem::path &path, bool append);
+    explicit Lz4OutputStream(stdout_tag_t);
     ~Lz4OutputStream() override;
 
     Lz4OutputStream(const Lz4OutputStream &) = delete;
@@ -199,3 +212,7 @@ class Lz4OutputStream final : public std::ostream
 [[nodiscard]] std::unique_ptr<std::ostream> open_text_output_stream(const std::filesystem::path &path,
                                                                    bool append,
                                                                    std::string *error_out);
+
+/// Compress text to stdout. `codec`: gzip|gz|zstd|zst|xz|lz4.
+[[nodiscard]] std::unique_ptr<std::ostream> open_compressed_stdout(std::string_view codec,
+                                                                  std::string *error_out);

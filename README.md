@@ -100,6 +100,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--sort` | Sort output lexicographically |
 | `--ignore-case` | Case-insensitive sort/dedup/check-sorted (keep original form) |
 | `--recursive`, `-r` | Recurse directory inputs for `.txt` and compressed wordlists |
+| `--compress CODEC` | Compress text stdout (`-`); `gzip`/`gz`, `zstd`/`zst`, `xz`, `lz4` |
 | `--deduplicate` | Remove duplicate words (forces sort if not already set) |
 | `--cuda` | Prefer GPU sort/dedup when built with CUDA and word count ≥ `--cuda-threshold` |
 | `--no-cuda` | Force CPU sort/dedup even when CUDA is available |

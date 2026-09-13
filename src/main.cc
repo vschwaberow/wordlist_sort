@@ -6,6 +6,7 @@
 
 #include "export_format.hpp"
 #include "gzip_stream.hpp"
+#include "io_buffer.hpp"
 #include "membership_filter.hpp"
 #include "sort_dedup.hpp"
 #include "word_pipeline.hpp"
@@ -131,6 +132,7 @@ constexpr std::array str_opt_specs{
     StrOptSpec{"--suffix", &Options::suffix, "Keep only words that end with SUFFIX"},
     StrOptSpec{"--regex", &Options::regex_pattern, "Keep only words matching ECMAScript regex"},
     StrOptSpec{"--delimiter", &Options::delimiter, "Field delimiter for --field (default TAB; first char, or \\t / ,)"},
+    StrOptSpec{"--compress", &Options::compress, "Compress stdout text: gzip|gz|zstd|zst|xz|lz4 (only with -o -)"},
 };
 
 constexpr std::size_t compute_help_col_width()
@@ -539,6 +541,15 @@ int main(const int argc, char *argv[])
         std::println(stderr, "Error: stdout (-) is only supported with --format=text");
         return 1;
     }
+
+    if (!args.options.compress.empty())
+    {
+        if (*format != ExportFormat::Text || !is_stdio_path(args.output_path))
+        {
+            std::println(stderr, "Error: --compress requires --format=text and output -");
+            return 1;
+        }
+    }
     if (args.options.append && *format != ExportFormat::Text)
     {
         std::println(stderr, "Error: --append is only supported with --format=text");
@@ -659,13 +670,27 @@ int main(const int argc, char *argv[])
     }
     std::mutex stream_mutex;
     std::unique_ptr<std::ostream> stream_out_owned;
+    std::unique_ptr<std::ostream> compressed_stdout;
+    std::ostream *text_stdout = &std::cout;
+    if (!args.options.compress.empty())
+    {
+        std::string open_error;
+        compressed_stdout = open_compressed_stdout(args.options.compress, &open_error);
+        if (!compressed_stdout)
+        {
+            std::println(stderr, "Error: {}", open_error.empty() ? "Failed to open stdout compressor"
+                                                                  : open_error);
+            return 1;
+        }
+        text_stdout = compressed_stdout.get();
+    }
     std::optional<ExternalSortBuilder> external_builder;
 
     if (stream_text)
     {
         if (is_stdio_path(args.output_path))
         {
-            args.options.stream_out = &std::cout;
+            args.options.stream_out = text_stdout;
         }
         else
         {
@@ -758,6 +783,30 @@ int main(const int argc, char *argv[])
             std::println("Applied membership filter during ingest → {} words remain.", remain);
     }
 
+    const auto write_text_or_export = [&](const std::vector<std::string> &out_words) -> int {
+        if (!args.options.compress.empty() && is_stdio_path(args.output_path) && *format == ExportFormat::Text)
+        {
+            const char sep = args.options.null_separated ? '\0' : '\n';
+            BufferedRecordWriter writer(*text_stdout, sep);
+            for (const auto &word : out_words)
+                writer.write(word);
+            if (!writer.flush() || !writer.good() || !text_stdout->flush() || !*text_stdout)
+            {
+                std::println(stderr, "Error: Failed to write compressed stdout");
+                return 1;
+            }
+            return 0;
+        }
+        if (const auto write_result = write_export(out_words, args.output_path, *format, args.options.append,
+                                                   args.options.null_separated);
+            !write_result)
+        {
+            std::println(stderr, "Error: {}", write_result.error());
+            return 1;
+        }
+        return 0;
+    };
+
     std::size_t external_streamed = 0;
     if (!stream_text)
     {
@@ -765,10 +814,10 @@ int main(const int argc, char *argv[])
         {
             if (is_stdio_path(args.output_path))
             {
-                external_streamed = external_builder->finish_to_stream(std::cout, args.options.null_separated ? '\0' : '\n');
+                external_streamed = external_builder->finish_to_stream(*text_stdout, args.options.null_separated ? static_cast<char>(0) : char{10});
                 args.options.external_sort = nullptr;
-                std::cout.flush();
-                if (!std::cout)
+                text_stdout->flush();
+                if (!*text_stdout)
                 {
                     std::println(stderr, "Error: Failed while writing external-sort output to stdout");
                     return 1;
@@ -801,11 +850,8 @@ int main(const int argc, char *argv[])
         {
             external_builder->finish(words);
             args.options.external_sort = nullptr;
-            if (const auto write_result = write_export(words, args.output_path, *format, args.options.append, args.options.null_separated); !write_result)
-            {
-                std::println(stderr, "Error: {}", write_result.error());
-                return 1;
-            }
+            if (const int wr = write_text_or_export(words); wr != 0)
+                return wr;
         }
         else
         {
@@ -822,19 +868,16 @@ int main(const int argc, char *argv[])
                                                    .tmp_dir = tmp_dir_path,
                                                });
 
-            if (const auto write_result = write_export(words, args.output_path, *format, args.options.append, args.options.null_separated); !write_result)
-            {
-                std::println(stderr, "Error: {}", write_result.error());
-                return 1;
-            }
+            if (const int wr = write_text_or_export(words); wr != 0)
+                return wr;
         }
     }
     else
     {
         if (is_stdio_path(args.output_path))
         {
-            std::cout.flush();
-            if (!std::cout)
+            text_stdout->flush();
+            if (!*text_stdout)
             {
                 std::println(stderr, "Error: Failed while writing streamed output to stdout");
                 return 1;
