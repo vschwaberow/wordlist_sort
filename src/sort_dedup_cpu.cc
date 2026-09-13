@@ -7,6 +7,7 @@
 #include "sort_dedup.hpp"
 
 #include <algorithm>
+#include <queue>
 #include <print>
 #include <ranges>
 
@@ -16,14 +17,6 @@ namespace
 [[nodiscard]] bool cuda_requested(const SortDedupOptions &options) noexcept
 {
     return options.use_cuda && !options.no_cuda;
-}
-
-[[nodiscard]] std::size_t total_payload_bytes(const std::vector<std::string> &words) noexcept
-{
-    std::size_t bytes = 0;
-    for (const auto &word : words)
-        bytes += word.size();
-    return bytes;
 }
 
 void print_cuda_not_compiled_note()
@@ -44,12 +37,6 @@ void print_cuda_below_threshold_note(const std::size_t word_count, const std::si
                  word_count, threshold);
 }
 
-void print_cuda_oom_note()
-{
-    std::println(stderr,
-                 "Note: --cuda ignored (working set does not fit in free VRAM); falling back to CPU.");
-}
-
 }
 
 [[nodiscard]] SortDedupPlan make_sort_dedup_plan(const bool sort, const bool deduplicate) noexcept
@@ -65,6 +52,61 @@ void announce_implicit_sort_if_needed(const SortDedupPlan &plan)
 {
     if (plan.announce_implicit_sort)
         std::println("Note: Deduplication requires sorting. Words were sorted.");
+}
+
+
+void merge_sorted_word_runs(std::vector<std::vector<std::string>> runs,
+                            const bool deduplicate,
+                            std::vector<std::string> &out)
+{
+    out.clear();
+    std::size_t total = 0;
+    for (const auto &run : runs)
+        total += run.size();
+    out.reserve(total);
+
+    struct Item
+    {
+        const std::string *word = nullptr;
+        std::size_t run = 0;
+        std::size_t index = 0;
+
+        [[nodiscard]] bool operator>(const Item &other) const
+        {
+            const int cmp = word->compare(*other.word);
+            if (cmp != 0)
+                return cmp > 0; // greater<> => min-heap by word
+            if (run != other.run)
+                return run > other.run;
+            return index > other.index;
+        }
+    };
+
+    std::priority_queue<Item, std::vector<Item>, std::greater<Item>> heap;
+    for (std::size_t r = 0; r < runs.size(); ++r)
+    {
+        if (!runs[r].empty())
+            heap.push(Item{.word = &runs[r][0], .run = r, .index = 0});
+    }
+
+    std::string last;
+    bool have_last = false;
+    while (!heap.empty())
+    {
+        const Item top = heap.top();
+        heap.pop();
+
+        if (!(deduplicate && have_last && *top.word == last))
+        {
+            out.push_back(*top.word);
+            last = *top.word;
+            have_last = true;
+        }
+
+        const std::size_t next = top.index + 1;
+        if (next < runs[top.run].size())
+            heap.push(Item{.word = &runs[top.run][next], .run = top.run, .index = next});
+    }
 }
 
 void sort_and_deduplicate_words_cpu(std::vector<std::string> &words, const SortDedupPlan &plan)
@@ -98,15 +140,10 @@ void sort_and_deduplicate_words(std::vector<std::string> &words, const SortDedup
         else
         {
             const std::size_t threshold = resolve_cuda_word_threshold(options.cuda_threshold);
-            const std::size_t payload = total_payload_bytes(words);
 
             if (words.size() < threshold)
             {
                 print_cuda_below_threshold_note(words.size(), threshold);
-            }
-            else if (!cuda_sort_dedup_memory_available(words.size(), payload))
-            {
-                print_cuda_oom_note();
             }
             else if (try_sort_and_deduplicate_words_cuda(words, plan, options.cuda_timing))
             {

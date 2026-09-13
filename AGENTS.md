@@ -100,7 +100,7 @@ cmake --build build-cuda -j
 - **`--no-cuda`**: force CPU path
 - **`--cuda-threshold N`**: minimum words for GPU (default: 10_000_000; `0` = auto ≈ `kCudaHeuristicMinWords` / 100k)
 - **`--cuda-timing`**: print H2D/sort/dedup/D2H timings on stderr
-- GPU path uses pinned host buffers and refuses the full in-VRAM pass when free VRAM is insufficient
+- GPU path uses pinned host buffers; oversized working sets use chunked GPU sort + host k-way merge
 - Without CUDA build, `--cuda` prints a note and uses CPU
 - CUDA failure at runtime falls back to CPU with a warning
 

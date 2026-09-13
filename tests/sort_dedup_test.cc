@@ -152,3 +152,26 @@ TEST(CudaThreshold, EstimateDeviceBytesScales)
     EXPECT_GT(large, small);
 }
 
+TEST(MergeSortedRuns, MergesAndDedups)
+{
+    std::vector<std::vector<std::string>> runs{
+        {"a", "c", "e"},
+        {"b", "c", "d"},
+        {"a", "f"},
+    };
+    std::vector<std::string> out;
+    merge_sorted_word_runs(std::move(runs), true, out);
+    EXPECT_EQ(out, (std::vector<std::string>{"a", "b", "c", "d", "e", "f"}));
+}
+
+TEST(MergeSortedRuns, KeepsDuplicatesWhenDisabled)
+{
+    std::vector<std::vector<std::string>> runs{
+        {"a", "b"},
+        {"a", "c"},
+    };
+    std::vector<std::string> out;
+    merge_sorted_word_runs(std::move(runs), false, out);
+    EXPECT_EQ(out, (std::vector<std::string>{"a", "a", "b", "c"}));
+}
+

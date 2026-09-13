@@ -13,8 +13,10 @@
 #include <thrust/sort.h>
 #include <thrust/unique.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <iterator>
 #include <cstring>
 #include <cstdio>
 #include <stdexcept>
@@ -300,6 +302,67 @@ void d2h_pinned(PinnedBuffer<T> &host, const thrust::device_vector<T> &device)
     return true;
 }
 
+
+[[nodiscard]] bool run_cuda_sort_dedup_chunked(std::vector<std::string> &words,
+                                               const SortDedupPlan &plan,
+                                               const bool timing)
+{
+    if (words.empty())
+        return true;
+
+    std::size_t payload_bytes = 0;
+    for (const auto &word : words)
+        payload_bytes += word.size();
+
+    const std::size_t avg_payload =
+        std::max<std::size_t>(1, (payload_bytes + words.size() - 1) / words.size());
+    std::size_t chunk_words = cuda_sort_dedup_max_words_for_payload(avg_payload, words.size());
+    if (chunk_words == 0)
+        chunk_words = 1;
+    // Ensure forward progress even under tight VRAM.
+    chunk_words = std::max<std::size_t>(chunk_words, 1);
+    if (chunk_words >= words.size())
+        return run_cuda_sort_dedup(words, plan, timing);
+
+    const auto wall_start = Clock::now();
+    const std::size_t in_words = words.size();
+    const std::size_t chunk_count = (words.size() + chunk_words - 1) / chunk_words;
+
+    // Each chunk must be sorted for the merge; apply local dedup when requested.
+    const SortDedupPlan chunk_plan{.perform_sort = true,
+                                   .perform_deduplicate = plan.perform_deduplicate,
+                                   .announce_implicit_sort = false};
+
+    std::vector<std::vector<std::string>> runs;
+    runs.reserve(chunk_count);
+
+    for (std::size_t offset = 0; offset < words.size(); offset += chunk_words)
+    {
+        const std::size_t end = std::min(offset + chunk_words, words.size());
+        // Copy on purpose: host RAM is the overflow spill; moving would invalidate later slices.
+        std::vector<std::string> chunk(words.begin() + static_cast<std::ptrdiff_t>(offset),
+                                       words.begin() + static_cast<std::ptrdiff_t>(end));
+        if (!run_cuda_sort_dedup(chunk, chunk_plan, false))
+            return false;
+        runs.push_back(std::move(chunk));
+    }
+
+    words.clear();
+    merge_sorted_word_runs(std::move(runs), plan.perform_deduplicate, words);
+    if (plan.announce_implicit_sort)
+        announce_implicit_sort_if_needed(plan);
+
+    if (timing)
+    {
+        const double total_ms = Ms(Clock::now() - wall_start).count();
+        std::fprintf(stderr,
+                     "cuda timing: mode=chunked in_words=%zu out_words=%zu chunks=%zu chunk_words=%zu total=%.3fms\n",
+                     in_words, words.size(), chunk_count, chunk_words, total_ms);
+    }
+
+    return true;
+}
+
 }
 
 [[nodiscard]] bool try_sort_and_deduplicate_words_cuda(std::vector<std::string> &words,
@@ -308,7 +371,14 @@ void d2h_pinned(PinnedBuffer<T> &host, const thrust::device_vector<T> &device)
 {
     try
     {
-        return run_cuda_sort_dedup(words, plan, timing);
+        std::size_t payload_bytes = 0;
+        for (const auto &word : words)
+            payload_bytes += word.size();
+
+        if (cuda_sort_dedup_memory_available(words.size(), payload_bytes))
+            return run_cuda_sort_dedup(words, plan, timing);
+
+        return run_cuda_sort_dedup_chunked(words, plan, timing);
     }
     catch (...)
     {

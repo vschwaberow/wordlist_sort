@@ -73,7 +73,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 
 Without a CUDA build, `--cuda` prints a note and uses the CPU path. If a CUDA run fails at runtime, the tool falls back to CPU with a warning.
 
-GPU transfers use **pinned host memory**. Before launching, the tool checks free VRAM against a conservative working-set estimate; if the list does not fit, it falls back to CPU with a note. `--cuda-threshold 0` selects an auto minimum (~100k words) instead of the 10M default.
+GPU transfers use **pinned host memory**. Before launching, the tool checks free VRAM against a conservative working-set estimate. If the full list does not fit, it switches to a **chunked out-of-core** GPU path (sort each VRAM-sized chunk, then k-way merge on the host). `--cuda-threshold 0` selects an auto minimum (~100k words) instead of the 10M default.
 
 ## Example
 
