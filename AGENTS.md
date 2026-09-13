@@ -105,6 +105,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **Compressed text output**: writing `--format=text` to a `.gz` / `.zst` (`.zstd`) / `.xz` / `.lz4` path compresses with zlib / libzstd / liblzma / liblz4. `--append` adds another member/frame/stream. Binary formats reject compressed outputs.
 - **`-` means stdio**: input `-` reads stdin (at most once); output `-` writes `--format=text` to stdout and forces quiet. Non-text formats refuse stdout.
 - **`--noutf8`** strips bytes `>127` on every input line (independent of `--dewebify`).
+- **`--upper`**: uppercase each survivor; if both `--lower` and `--upper` are set, `--upper` wins.
 - **`-0` / `--null`**: NUL-separated text I/O for ingest and `--format=text` output (external-sort merge included). Rejected for binary formats. Internal spill runs stay newline-based.
 - **`--append`**: text-only; open output with `app` instead of `trunc`. Existing files do not require `--force`. Rejected for `cdb`/`fst`/`pthash`.
 - **`--skip-comments`**: drop lines whose first non-space/tab character is `#` (before other line transforms).
