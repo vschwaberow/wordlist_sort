@@ -195,3 +195,31 @@ TEST(E2eCli, MultipleStdinRejected)
     EXPECT_NE(result.stderr_text.find("stdin"), std::string::npos);
 }
 
+TEST(E2eCli, ProgressReportsToStderr)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "a\nb\nc\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --progress " + shell_quote(output.string()) + " " +
+                                                shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0);
+    EXPECT_EQ(test_helpers::read_text_file(output), "a\nb\nc\n");
+    EXPECT_NE(result.stderr_text.find("progress:"), std::string::npos);
+    EXPECT_NE(result.stderr_text.find("ingest done"), std::string::npos);
+}
+
+TEST(E2eCli, MissingInputExitsNonZero)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path output = work / "out.txt";
+    const fs::path missing = work / "no-such-input.txt";
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) + " -q " +
+                                                shell_quote(output.string()) + " " +
+                                                shell_quote(missing.string()));
+    EXPECT_NE(result.exit_code, 0);
+}
+

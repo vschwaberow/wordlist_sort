@@ -27,6 +27,7 @@
 #include <ranges>
 #include <expected>
 #include <span>
+#include <thread>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -84,6 +85,7 @@ constexpr std::array flag_specs{
     FlagSpec{"--cuda-timing",  &Options::cuda_timing,  "Print CUDA phase timings (H2D/sort/dedup/D2H) to stderr"},
     FlagSpec{"--quiet",        &Options::quiet,        "Suppress informational stdout (errors/warnings still print)"},
     FlagSpec{"-q",             &Options::quiet,        "Short form of --quiet"},
+    FlagSpec{"--progress",     &Options::progress,     "Print ingest progress to stderr (words/sec)"},
 };
 
 constexpr std::array int_opt_specs{
@@ -433,8 +435,54 @@ int main(const int argc, char *argv[])
             std::println("External sort ingest flush enabled (chunk={}).", args.options.sort_chunk);
     }
 
-    if (!process_multiple_files_parallel(args.input_paths, words, total_words_processed, args.options))
-        std::println(stderr, "Warning: One or more files may have failed to process completely.");
+    std::atomic<bool> ingest_done{false};
+    std::thread progress_thread;
+    if (args.options.progress)
+    {
+        progress_thread = std::thread(
+            [&total_words_processed, &ingest_done]
+            {
+                using clock = std::chrono::steady_clock;
+                const auto start = clock::now();
+                std::size_t last = 0;
+                while (!ingest_done.load(std::memory_order_acquire))
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    if (ingest_done.load(std::memory_order_acquire))
+                        break;
+                    const auto now = clock::now();
+                    const double secs = std::chrono::duration<double>(now - start).count();
+                    const std::size_t n = total_words_processed.load(std::memory_order_relaxed);
+                    const double rate = secs > 0.0 ? static_cast<double>(n) / secs : 0.0;
+                    const double delta_rate =
+                        secs > 0.0 ? static_cast<double>(n - last) / 0.5 : 0.0;
+                    last = n;
+                    std::println(stderr, "progress: {} words ({:.0f}/s avg, {:.0f}/s recent)", n, rate,
+                                 delta_rate);
+                }
+            });
+    }
+
+    const bool ingest_ok =
+        process_multiple_files_parallel(args.input_paths, words, total_words_processed, args.options);
+    ingest_done.store(true, std::memory_order_release);
+    if (progress_thread.joinable())
+        progress_thread.join();
+
+    if (args.options.progress)
+    {
+        const auto ingest_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   std::chrono::high_resolution_clock::now() - start_time)
+                                   .count();
+        std::println(stderr, "progress: ingest done, {} words in {} ms",
+                     total_words_processed.load(), ingest_ms);
+    }
+
+    if (!ingest_ok)
+    {
+        std::println(stderr, "Error: One or more input files failed to process completely.");
+        return 1;
+    }
 
     if (use_membership)
     {
