@@ -25,6 +25,9 @@ wordlist_sort_add_cxx_test(word_pipeline_test
     ${WORDLIST_SORT_SORT_DEDUP_CPU}
     ${CMAKE_SOURCE_DIR}/src/sort_dedup_cuda_stub.cc)
 
+wordlist_sort_add_cxx_test(bloom_filter_test
+    bloom_filter_test.cc)
+
 wordlist_sort_add_cxx_test(e2e_cli_test
     e2e_cli_test.cc)
 

@@ -81,6 +81,9 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--fuzzy` | Fuzzy expand queries via Levenshtein on FST `--lookup` |
 | `--distance N` | Max edit distance for `--fuzzy` (0–3; default 1) |
 | `--filter-engine <str>` | Membership backend for exclude/intersect/lookup text indexes: `hash` (default), `fst`, `pthash` |
+| `--bloom` | Force Bloom early-drop gate on membership filters |
+| `--no-bloom` | Disable Bloom early-drop (overrides auto-on for text B) |
+| `--bloom-bits <int>` | Bloom bits per key (4–24; default 10 ≈ 1% FP) |
 
 ### Flags
 

@@ -65,6 +65,8 @@ struct Options
     bool recursive = false;
     bool fuzzy = false;
     bool miss = false;
+    bool bloom = false;
+    bool no_bloom = false;
     bool force = false;
     bool skip_comments = false;
     bool append = false;
@@ -81,6 +83,7 @@ struct Options
     int field = 0;
     /// Max Levenshtein distance for --fuzzy (0..3; default 1 when fuzzy).
     int distance = 1;
+    int bloom_bits = 10;
     std::string delimiter = "	";
     std::string tmp_dir;
     std::string prefix;

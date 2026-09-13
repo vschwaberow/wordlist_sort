@@ -949,6 +949,33 @@ TEST(E2eCli, QueryMutuallyExclusiveWithLookup)
     EXPECT_NE(result.exit_code, 0);
 }
 
+
+TEST(E2eCli, BloomExcludeMatchesNoBloom)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "a.txt";
+    const fs::path deny = work / "b.txt";
+    const fs::path out_bloom = work / "out_bloom.txt";
+    const fs::path out_plain = work / "out_plain.txt";
+    test_helpers::write_text_file(input, "apple\nbanana\ncherry\ndate\n");
+    test_helpers::write_text_file(deny, "banana\ndate\n");
+
+    const auto with_bloom = test_helpers::run_command(
+        shell_quote(wordlist_sort_exe()) + " -q --exclude " + shell_quote(deny.string()) +
+        " --bloom --sort -o " + shell_quote(out_bloom.string()) + " " +
+        shell_quote(input.string()));
+    EXPECT_EQ(with_bloom.exit_code, 0) << with_bloom.stderr_text;
+
+    const auto no_bloom = test_helpers::run_command(
+        shell_quote(wordlist_sort_exe()) + " -q --exclude " + shell_quote(deny.string()) +
+        " --no-bloom --sort -o " + shell_quote(out_plain.string()) + " " +
+        shell_quote(input.string()));
+    EXPECT_EQ(no_bloom.exit_code, 0) << no_bloom.stderr_text;
+
+    EXPECT_EQ(test_helpers::read_text_file(out_bloom), "apple\ncherry\n");
+    EXPECT_EQ(test_helpers::read_text_file(out_bloom), test_helpers::read_text_file(out_plain));
+}
+
 TEST(E2eCli, ParallelFileSplitMatchesSerial)
 {
     const auto work = test_helpers::make_temp_dir();
