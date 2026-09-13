@@ -46,12 +46,14 @@ void print_cuda_below_threshold_note(const std::size_t word_count, const std::si
 
 }
 
-[[nodiscard]] SortDedupPlan make_sort_dedup_plan(const bool sort, const bool deduplicate) noexcept
+[[nodiscard]] SortDedupPlan make_sort_dedup_plan(const bool sort, const bool deduplicate,
+                                                const bool ignore_case) noexcept
 {
     return SortDedupPlan{
         .perform_sort = sort || deduplicate,
         .perform_deduplicate = deduplicate,
         .announce_implicit_sort = deduplicate && !sort,
+        .ignore_case = ignore_case,
     };
 }
 
@@ -119,13 +121,21 @@ void merge_sorted_word_runs(std::vector<std::vector<std::string>> runs,
 void sort_and_deduplicate_words_cpu(std::vector<std::string> &words, const SortDedupPlan &plan)
 {
     if (plan.perform_sort)
-        std::ranges::sort(words);
+    {
+        if (plan.ignore_case)
+            std::ranges::stable_sort(words, less_ignore_case);
+        else
+            std::ranges::sort(words);
+    }
 
     if (!plan.perform_deduplicate)
         return;
 
     announce_implicit_sort_if_needed(plan);
-    words.erase(std::ranges::unique(words).begin(), words.end());
+    if (plan.ignore_case)
+        words.erase(std::ranges::unique(words, equal_ignore_case).begin(), words.end());
+    else
+        words.erase(std::ranges::unique(words).begin(), words.end());
 }
 
 namespace
@@ -196,8 +206,10 @@ void merge_run_files(const std::vector<std::filesystem::path> &run_paths,
         std::size_t run = 0;
     };
 
-    auto cmp = [&readers](const Item &a, const Item &b) {
-        const int c = readers[a.run].current.compare(readers[b.run].current);
+    auto cmp = [&readers, &plan](const Item &a, const Item &b) {
+        const int c = plan.ignore_case
+                          ? compare_ignore_case(readers[a.run].current, readers[b.run].current)
+                          : readers[a.run].current.compare(readers[b.run].current);
         if (c != 0)
             return c > 0;
         return a.run > b.run;
@@ -217,7 +229,10 @@ void merge_run_files(const std::vector<std::filesystem::path> &run_paths,
         const Item top = heap.top();
         heap.pop();
         auto &reader = readers[top.run];
-        if (!(plan.perform_deduplicate && have_last && reader.current == last))
+        const bool dup = plan.perform_deduplicate && have_last &&
+                         (plan.ignore_case ? equal_ignore_case(reader.current, last)
+                                           : reader.current == last);
+        if (!dup)
         {
             out.push_back(reader.current);
             last = reader.current;
@@ -245,8 +260,10 @@ void merge_run_files(const std::vector<std::filesystem::path> &run_paths,
         std::size_t run = 0;
     };
 
-    auto cmp = [&readers](const Item &a, const Item &b) {
-        const int c = readers[a.run].current.compare(readers[b.run].current);
+    auto cmp = [&readers, &plan](const Item &a, const Item &b) {
+        const int c = plan.ignore_case
+                          ? compare_ignore_case(readers[a.run].current, readers[b.run].current)
+                          : readers[a.run].current.compare(readers[b.run].current);
         if (c != 0)
             return c > 0;
         return a.run > b.run;
@@ -268,7 +285,10 @@ void merge_run_files(const std::vector<std::filesystem::path> &run_paths,
         const Item top = heap.top();
         heap.pop();
         auto &reader = readers[top.run];
-        if (!(plan.perform_deduplicate && have_last && reader.current == last))
+        const bool dup = plan.perform_deduplicate && have_last &&
+                         (plan.ignore_case ? equal_ignore_case(reader.current, last)
+                                           : reader.current == last);
+        if (!dup)
         {
             writer.write(reader.current);
             last = reader.current;
@@ -308,7 +328,8 @@ void sort_and_deduplicate_words_external(std::vector<std::string> &words,
 
     const SortDedupPlan chunk_plan{.perform_sort = true,
                                    .perform_deduplicate = plan.perform_deduplicate,
-                                   .announce_implicit_sort = false};
+                                   .announce_implicit_sort = false,
+                                   .ignore_case = plan.ignore_case};
 
     std::vector<std::filesystem::path> run_paths;
     run_paths.reserve((words.size() + chunk_words - 1) / chunk_words);
@@ -356,7 +377,8 @@ void ExternalSortBuilder::flush_unlocked()
 
     const SortDedupPlan chunk_plan{.perform_sort = true,
                                    .perform_deduplicate = plan_.perform_deduplicate,
-                                   .announce_implicit_sort = false};
+                                   .announce_implicit_sort = false,
+                                   .ignore_case = plan_.ignore_case};
     sort_and_deduplicate_words_cpu(buffer_, chunk_plan);
 
     const auto path = make_run_temp_path(run_paths_.size(), tmp_dir_);
@@ -475,11 +497,16 @@ std::size_t ExternalSortBuilder::finish_to_stream(std::ostream &out, const char 
 
 void sort_and_deduplicate_words(std::vector<std::string> &words, const SortDedupOptions &options)
 {
-    const SortDedupPlan plan = make_sort_dedup_plan(options.sort, options.deduplicate);
+    const SortDedupPlan plan = make_sort_dedup_plan(options.sort, options.deduplicate, options.ignore_case);
     if (!plan.perform_sort && !plan.perform_deduplicate)
         return;
 
-    if (cuda_requested(options))
+    if (cuda_requested(options) && options.ignore_case)
+    {
+        if (!options.quiet)
+            std::println(stderr, "Note: --cuda ignored (--ignore-case uses CPU sort/dedup).");
+    }
+    else if (cuda_requested(options))
     {
         if (!cuda_sort_dedup_is_compiled())
         {

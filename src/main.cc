@@ -84,6 +84,7 @@ constexpr std::array flag_specs{
     FlagSpec{"--dewebify",     &Options::dewebify,     "Extract text from HTML input (strips tags)"},
     FlagSpec{"--noutf8",       &Options::noutf8,       "Keep only ASCII characters (0-127) on each input line"},
     FlagSpec{"--sort",         &Options::sort,         "Sort the output words lexicographically"},
+    FlagSpec{"--ignore-case",  &Options::ignore_case,  "Case-insensitive sort/dedup/check-sorted (keep original form)"},
     FlagSpec{"--deduplicate",  &Options::deduplicate,  "Remove duplicate words (implies --sort)"},
     FlagSpec{"--cuda",         &Options::cuda,         "Use GPU for sort/dedup when built with CUDA and word count exceeds threshold"},
     FlagSpec{"--no-cuda",      &Options::no_cuda,      "Force CPU sort/dedup even when CUDA is available"},
@@ -496,7 +497,7 @@ int main(const int argc, char *argv[])
         std::string check_error;
         const bool ok = check_inputs_sorted(args.input_paths, args.options.null_separated,
                                             args.options.skip_comments, args.options.deduplicate,
-                                            &check_error);
+                                            args.options.ignore_case, &check_error);
         if (!ok)
         {
             std::println(stderr, "Error: {}", check_error);
@@ -560,7 +561,8 @@ int main(const int argc, char *argv[])
     }
     else if (external_ingest)
     {
-        const auto plan = make_sort_dedup_plan(args.options.sort, args.options.deduplicate);
+        const auto plan = make_sort_dedup_plan(args.options.sort, args.options.deduplicate,
+                                               args.options.ignore_case);
         external_builder.emplace(plan, static_cast<std::size_t>(args.options.sort_chunk),
                                   args.options.quiet, tmp_dir_path);
         args.options.external_sort = &(*external_builder);
@@ -689,6 +691,7 @@ int main(const int argc, char *argv[])
                                                    .cuda_threshold = static_cast<std::size_t>(args.options.cuda_threshold),
                                                    .sort_chunk = static_cast<std::size_t>(args.options.sort_chunk),
                                                    .quiet = args.options.quiet,
+                                                   .ignore_case = args.options.ignore_case,
                                                    .tmp_dir = tmp_dir_path,
                                                });
 

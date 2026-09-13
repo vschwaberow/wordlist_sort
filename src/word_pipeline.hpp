@@ -60,6 +60,7 @@ struct Options
     bool progress = false;
     bool stats = false;
     bool check_sorted = false;
+    bool ignore_case = false;
     bool force = false;
     bool skip_comments = false;
     bool append = false;
@@ -136,6 +137,7 @@ void trim_special_inplace(std::string &str) noexcept;
                                        bool null_separated,
                                        bool skip_comments,
                                        bool require_unique,
+                                       bool ignore_case,
                                        std::string *error_out);
 
 [[nodiscard]] bool process_multiple_files_parallel(const std::vector<std::filesystem::path> &paths,

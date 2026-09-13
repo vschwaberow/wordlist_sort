@@ -490,6 +490,7 @@ void trim_special_inplace(std::string &str) noexcept
                                        const bool null_separated,
                                        const bool skip_comments,
                                        const bool require_unique,
+                                       const bool ignore_case,
                                        std::string *error_out)
 {
     const char sep = null_separated ? '\0' : '\n';
@@ -531,7 +532,10 @@ void trim_special_inplace(std::string &str) noexcept
             }
             if (have_prev)
             {
-                const bool ok = require_unique ? (prev < rec) : !(prev > rec);
+                const bool ok = ignore_case
+                                    ? (require_unique ? compare_ignore_case(prev, rec) < 0
+                                                      : compare_ignore_case(prev, rec) <= 0)
+                                    : (require_unique ? (prev < rec) : !(prev > rec));
                 if (!ok)
                 {
                     if (error_out)

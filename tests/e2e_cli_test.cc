@@ -658,3 +658,38 @@ TEST(E2eCli, FieldCut)
     EXPECT_EQ(csv.exit_code, 0) << csv.stderr_text;
     EXPECT_EQ(test_helpers::read_text_file(output), "z\n");
 }
+
+TEST(E2eCli, IgnoreCaseSortDedup)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "Apple\napple\nBanana\nbanana\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --ignore-case --sort --deduplicate " +
+                                                shell_quote(output.string()) + " " +
+                                                shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(output), "Apple\nBanana\n");
+}
+
+TEST(E2eCli, IgnoreCaseCheckSorted)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "Apple\napple\nBanana\n");
+
+    const auto ok = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                             " -q --ignore-case --check-sorted " +
+                                             shell_quote(output.string()) + " " +
+                                             shell_quote(input.string()));
+    EXPECT_EQ(ok.exit_code, 0) << ok.stderr_text;
+
+    const auto strict = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                  " -q --ignore-case --check-sorted --deduplicate " +
+                                                  shell_quote(output.string()) + " " +
+                                                  shell_quote(input.string()));
+    EXPECT_NE(strict.exit_code, 0);
+}
