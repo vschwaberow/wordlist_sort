@@ -13,6 +13,7 @@
 #include <atomic>
 #include <charconv>
 #include <chrono>
+#include <memory>
 #include <cstdio>
 #include <filesystem>
 #include <format>
@@ -261,7 +262,7 @@ using ParseResult = std::expected<std::optional<ParsedArgs>, std::string>;
 
 int main(const int argc, char *argv[])
 {
-    const auto parse_result = parse_args(argc, argv);
+    auto parse_result = parse_args(argc, argv);
     if (!parse_result)
     {
         std::println(stderr, "Error: {}", parse_result.error());
@@ -278,20 +279,16 @@ int main(const int argc, char *argv[])
                  BUILD_TIME, BUILD_PLATFORM);
     std::println("{}\n", PROGRAM_COPYRIGHT);
 
-    const auto start_time = std::chrono::high_resolution_clock::now();
-    std::atomic<std::size_t> total_words_processed{0};
-    std::vector<std::string> words;
-
-    if (!process_multiple_files_parallel(args.input_paths, words, total_words_processed, args.options))
-        std::println(stderr, "Warning: One or more files may have failed to process completely.");
-
     if (!args.options.exclude_path.empty() && !args.options.intersect_path.empty())
     {
         std::println(stderr, "Error: --exclude and --intersect are mutually exclusive");
         return 1;
     }
 
-    if (!args.options.exclude_path.empty() || !args.options.intersect_path.empty())
+    std::unique_ptr<MembershipFilter> membership_filter;
+    const bool use_membership =
+        !args.options.exclude_path.empty() || !args.options.intersect_path.empty();
+    if (use_membership)
     {
         const auto engine = parse_filter_engine(args.options.filter_engine);
         if (!engine)
@@ -310,22 +307,31 @@ int main(const int argc, char *argv[])
             return 1;
         }
 
-        const auto filter = build_membership_filter(*filter_keys, *engine);
+        auto filter = build_membership_filter(*filter_keys, *engine);
         if (!filter)
         {
             std::println(stderr, "Error: {}", filter.error());
             return 1;
         }
 
-        const bool exclude = !args.options.exclude_path.empty();
-        std::erase_if(words, [&](const std::string &word) {
-            const bool hit = (*filter)->contains(word);
-            return exclude ? hit : !hit;
-        });
+        membership_filter = std::move(*filter);
+        args.options.membership = membership_filter.get();
+        args.options.membership_exclude = !args.options.exclude_path.empty();
+        std::println("Built {} filter via {} ({} keys); streaming inputs with early drop.",
+                     args.options.membership_exclude ? "exclude" : "intersect",
+                     filter_engine_name(*engine), membership_filter->size());
+    }
 
-        std::println("Applied {} filter via {} ({} keys) → {} words remain.",
-                     exclude ? "exclude" : "intersect", filter_engine_name(*engine), (*filter)->size(),
-                     words.size());
+    const auto start_time = std::chrono::high_resolution_clock::now();
+    std::atomic<std::size_t> total_words_processed{0};
+    std::vector<std::string> words;
+
+    if (!process_multiple_files_parallel(args.input_paths, words, total_words_processed, args.options))
+        std::println(stderr, "Warning: One or more files may have failed to process completely.");
+
+    if (use_membership)
+    {
+        std::println("Applied membership filter during ingest → {} words remain.", words.size());
     }
 
     sort_and_deduplicate_words(words, SortDedupOptions{

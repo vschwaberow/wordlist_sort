@@ -5,6 +5,7 @@
 // Copyright (c) 2026 Volker Schwaberow
 
 #include "word_pipeline.hpp"
+#include "membership_filter.hpp"
 
 #include <algorithm>
 #include <array>
@@ -208,30 +209,39 @@ void trim_special_inplace(std::string &str) noexcept
                                 std::atomic<std::size_t> &total_words_processed_counter,
                                 const Options &options)
 {
-    const auto content_result = read_file(path);
-    if (!content_result)
+    std::ifstream file(path, std::ios::binary);
+    if (!file)
     {
-        std::println(stderr, "Error: {}", content_result.error());
+        std::println(stderr, "Error: Unable to open file: {}", path.string());
         return false;
     }
-
-    const std::span file_content{*content_result};
 
     const auto try_add_word = [&](const std::string_view candidate)
     {
         auto processed = process_word(candidate, options);
-        if (processed && (options.minlen == 0 ||
-                          processed->size() >= static_cast<std::size_t>(options.minlen)) &&
-            (options.maxlen == 0 || processed->size() <= static_cast<std::size_t>(options.maxlen)))
+        if (!processed)
+            return;
+        if (options.minlen != 0 && processed->size() < static_cast<std::size_t>(options.minlen))
+            return;
+        if (options.maxlen != 0 && processed->size() > static_cast<std::size_t>(options.maxlen))
+            return;
+
+        total_words_processed_counter++;
+        if (options.membership != nullptr)
         {
-            output_words.push_back(std::move(*processed));
-            total_words_processed_counter++;
+            const bool hit = options.membership->contains(*processed);
+            const bool drop = options.membership_exclude ? hit : !hit;
+            if (drop)
+                return;
         }
+        output_words.push_back(std::move(*processed));
     };
 
-    for (const auto line_range : file_content | std::views::split('\n'))
+    std::string line_str;
+    while (std::getline(file, line_str))
     {
-        std::string line_str(line_range.begin(), line_range.end());
+        if (!line_str.empty() && line_str.back() == '\r')
+            line_str.pop_back();
 
         if (options.dewebify)
         {
@@ -255,6 +265,12 @@ void trim_special_inplace(std::string &str) noexcept
         {
             try_add_word(line_str);
         }
+    }
+
+    if (file.bad())
+    {
+        std::println(stderr, "Error: Unable to read file: {}", path.string());
+        return false;
     }
     return true;
 }

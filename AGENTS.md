@@ -70,7 +70,7 @@ These match the current code and README (keep them aligned):
 
 1. **Binary name is `wordlist_sort`.** `add_executable(wordlist_sort …)` and `PROJECT_NAME` / the version banner all use the same name. Output path: `build/wordlist_sort`.
 2. **Language standard is C++26.** `CMAKE_CXX_STANDARD 26` with `STANDARD_REQUIRED ON`; `cmake_minimum_required(VERSION 3.18)`.
-3. **I/O is bulk `ifstream` → `vector<char>`.** There is no `mmap` / memory-mapped path; large inputs are fully resident in RAM.
+3. **I/O streams lines via `getline`.** There is no `mmap` path; peak RAM is survivors (+ optional B membership filter), not the full input file.
 4. **Dedup is sort + unique.** `--deduplicate` runs `std::ranges::sort` then `std::unique` + erase. No `unordered_set` / `unordered_map` for deduplication.
 5. **Release optimization is portable by default.** GCC/Clang get `-O3` (MSVC `/O2`) only for `CMAKE_BUILD_TYPE=Release`. `-march=native` is **opt-in** via `-DWORDLIST_SORT_NATIVE_ARCH=ON` (GCC/Clang only; non-portable).
 
@@ -103,20 +103,22 @@ These are behaviors not clearly documented and easy to get wrong:
 - **Positional order: OUTPUT first, then inputs.** Positional parsing registers output before inputs. Usage is `wordlist_sort <out> <in1> [in2 ...]`, opposite of most CLIs.
 - **`--noutf8` only does anything when combined with `--dewebify`.** The non-ASCII (>127) stripping lives inside the `if (options.dewebify)` block in `process_file`. Alone, `--noutf8` has no effect.
 - **`--deduplicate` silently forces a sort** even without `--sort`, and prints a note to stdout. Dedup requires sorted input (`std::unique` only removes *consecutive* duplicates).
-- **Threading is one `std::async` task per input file** (`std::launch::async`), with no thread pool or concurrency cap. Passing hundreds of files spawns hundreds of threads. Each task reads its file fully into memory, so peak RAM scales with concurrent file sizes.
+- **Threading is one `std::async` task per input file** (`std::launch::async`), with no thread pool or concurrency cap. Passing hundreds of files spawns hundreds of threads. Each task streams its file line-by-line; peak RAM scales with survivor words (plus B filter when set filters are used), not full concurrent file sizes.
 - **`--cuda` / `--no-cuda` / `--cuda-threshold`**: GPU sort/dedup (compile-time optional via `-DWORDLIST_SORT_CUDA=ON`). See gotcha §6.
-- **`--exclude` / `--intersect` / `--filter-engine`**: set difference or intersection against a side file; engines `hash`, `fst`, `pthash` (`WORDLIST_SORT_PTHASH`, default ON).
+- **`--exclude` / `--intersect` / `--filter-engine`**: build B filter first, then stream A with early drop; engines `hash`, `fst`, `pthash` (`WORDLIST_SORT_PTHASH`, default ON).
 - **`--format text|cdb|fst`**: output encoder after sort/dedup (`cdb` = DJB Constant Database, `fst` = WLTRIE1 compact trie). Duplicate keys keep the first occurrence.
 - **`--dup-sense N` (0–100)** rejects a word if *any single byte* exceeds `N%` of the word's length (uses a 256-bucket `std::array<unsigned int, 256>` char histogram).
 
 ## Architecture & Data Flow
 
-1. **`read_file`** — loads a file fully into `std::vector<char>` via `std::ifstream` (binary).
-2. **`process_word`** / **`process_file`** — filter pipeline in `word_pipeline.cc` (`strip_html_tags`, trims, dup-sense, email-sort, min/max len).
+1. **`process_file`** — streams each input line via `std::getline` (no full-file buffer); optional membership gate drops during ingest.
+2. **`process_word`** — transform/filter pipeline (`strip_html_tags`, trims, dup-sense, email-sort, min/max len).
 3. **`process_multiple_files_parallel`** — one `std::async` task per input file.
-4. **`sort_and_deduplicate_words`** — CPU or optional CUDA sort/dedup (`sort_dedup_*.cc`).
-5. **`write_lines`** — one word per line to the output path.
-6. **`main`** — CLI in `main.cc`, orchestrates the above.
+4. **`--exclude`/`--intersect`** — build membership from B before reading A (`membership_filter.*`).
+5. **`sort_and_deduplicate_words`** — CPU or optional CUDA sort/dedup (`sort_dedup_*.cc`).
+6. **`write_export` / `write_lines`** — text / cdb / fst writers.
+7. **`main`** — CLI in `main.cc`, orchestrates the above.
+8. **`read_file`** — still available for bulk reads (helpers/tests); ingest path no longer uses it.
 
 ## Coding Conventions
 
