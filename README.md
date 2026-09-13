@@ -65,6 +65,8 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--jobs <int>` | Parallel input workers: omit = auto (`hardware_concurrency`), `0` = unlimited, `>0` = cap |
 | `--sort-chunk <int>` | External CPU sort/dedup: max words per temp run (`0` = off; spills when the list is larger) |
 | `--limit <int>` | Stop ingest after N accepted survivors (`0` = unlimited; applies before sort/dedup) |
+| `--every <int>` | Keep every N-th accepted survivor (`0` = off; 0-based index) |
+| `--sample <int>` | Reservoir-sample N accepted survivors (`0` = off; disables text streaming) |
 | `--tmp-dir <path>` | Directory for external-sort / filter temp files (default: system temp; created if missing) |
 | `--prefix <str>` | Keep only words that start with PREFIX |
 | `--suffix <str>` | Keep only words that end with SUFFIX |
