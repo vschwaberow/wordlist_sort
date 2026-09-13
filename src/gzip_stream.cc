@@ -5,6 +5,8 @@
 // Copyright (c) 2026 Volker Schwaberow
 
 #include "gzip_stream.hpp"
+
+#include <format>
 #include "io_buffer.hpp"
 
 #include <algorithm>
@@ -12,6 +14,7 @@
 #include <cstring>
 #include <cstdint>
 #include <cstdio>
+#include <unistd.h>
 #include <fstream>
 #include <vector>
 
@@ -20,6 +23,20 @@ namespace {
 [[nodiscard]] bool eq_ci(char a, char b) noexcept
 {
     return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
+}
+
+[[nodiscard]] FILE *fopen_stdout_dup() noexcept
+{
+    const int fd = ::dup(STDOUT_FILENO);
+    if (fd < 0)
+        return nullptr;
+    FILE *file = ::fdopen(fd, "wb");
+    if (file == nullptr)
+    {
+        ::close(fd);
+        return nullptr;
+    }
+    return file;
 }
 
 } // namespace
@@ -124,6 +141,19 @@ class GzipOutputStream::Buf final : public std::streambuf
             setp(buffer_.data(), buffer_.data() + buffer_.size());
     }
 
+    explicit Buf(stdout_tag_t)
+    {
+        const int fd = ::dup(STDOUT_FILENO);
+        if (fd >= 0)
+        {
+            file_ = gzdopen(fd, "wb");
+            if (file_ == nullptr)
+                ::close(fd);
+        }
+        if (file_ != nullptr)
+            setp(buffer_.data(), buffer_.data() + buffer_.size());
+    }
+
     ~Buf() override { close_all(); }
 
     [[nodiscard]] bool ok() const noexcept { return file_ != nullptr; }
@@ -191,6 +221,14 @@ class GzipOutputStream::Buf final : public std::streambuf
 
 GzipOutputStream::GzipOutputStream(const std::filesystem::path &path, const bool append)
     : std::ostream(nullptr), buf_(std::make_unique<Buf>(path, append))
+{
+    rdbuf(buf_.get());
+    if (!buf_->ok())
+        setstate(std::ios::failbit);
+}
+
+GzipOutputStream::GzipOutputStream(stdout_tag_t)
+    : std::ostream(nullptr), buf_(std::make_unique<Buf>(stdout_tag))
 {
     rdbuf(buf_.get());
     if (!buf_->ok())
@@ -339,6 +377,25 @@ class ZstdOutputStream::Buf final : public std::streambuf
         ok_ = true;
     }
 
+    explicit Buf(stdout_tag_t)
+        : file_(fopen_stdout_dup()),
+          cstream_(ZSTD_createCStream()),
+          out_storage_(ZSTD_CStreamOutSize())
+    {
+        if (file_ == nullptr || cstream_ == nullptr)
+        {
+            close_all();
+            return;
+        }
+        if (ZSTD_isError(ZSTD_initCStream(cstream_, 3)))
+        {
+            close_all();
+            return;
+        }
+        setp(in_storage_.data(), in_storage_.data() + in_storage_.size());
+        ok_ = true;
+    }
+
     ~Buf() override { close_all(); }
 
     [[nodiscard]] bool ok() const noexcept { return ok_; }
@@ -435,6 +492,14 @@ class ZstdOutputStream::Buf final : public std::streambuf
 
 ZstdOutputStream::ZstdOutputStream(const std::filesystem::path &path, const bool append)
     : std::ostream(nullptr), buf_(std::make_unique<Buf>(path, append))
+{
+    rdbuf(buf_.get());
+    if (!buf_->ok())
+        setstate(std::ios::failbit);
+}
+
+ZstdOutputStream::ZstdOutputStream(stdout_tag_t)
+    : std::ostream(nullptr), buf_(std::make_unique<Buf>(stdout_tag))
 {
     rdbuf(buf_.get());
     if (!buf_->ok())
@@ -585,6 +650,25 @@ class XzOutputStream::Buf final : public std::streambuf
         ok_ = true;
     }
 
+    explicit Buf(stdout_tag_t)
+        : file_(fopen_stdout_dup()),
+          in_storage_(1 << 16),
+          out_storage_(1 << 16)
+    {
+        if (file_ == nullptr)
+            return;
+        stream_ = LZMA_STREAM_INIT;
+        const lzma_ret ret = lzma_easy_encoder(&stream_, 6, LZMA_CHECK_CRC64);
+        if (ret != LZMA_OK)
+        {
+            close_all();
+            return;
+        }
+        encoder_live_ = true;
+        setp(in_storage_.data(), in_storage_.data() + in_storage_.size());
+        ok_ = true;
+    }
+
     ~Buf() override { close_all(); }
 
     [[nodiscard]] bool ok() const noexcept { return ok_; }
@@ -691,6 +775,14 @@ class XzOutputStream::Buf final : public std::streambuf
 
 XzOutputStream::XzOutputStream(const std::filesystem::path &path, const bool append)
     : std::ostream(nullptr), buf_(std::make_unique<Buf>(path, append))
+{
+    rdbuf(buf_.get());
+    if (!buf_->ok())
+        setstate(std::ios::failbit);
+}
+
+XzOutputStream::XzOutputStream(stdout_tag_t)
+    : std::ostream(nullptr), buf_(std::make_unique<Buf>(stdout_tag))
 {
     rdbuf(buf_.get());
     if (!buf_->ok())
@@ -856,6 +948,29 @@ class Lz4OutputStream::Buf final : public std::streambuf
         ok_ = true;
     }
 
+    explicit Buf(stdout_tag_t)
+        : file_(fopen_stdout_dup()),
+          in_storage_(1 << 16),
+          out_storage_(LZ4F_compressBound(1 << 16, nullptr) + LZ4F_HEADER_SIZE_MAX)
+    {
+        if (file_ == nullptr)
+            return;
+        if (LZ4F_isError(LZ4F_createCompressionContext(&cctx_, LZ4F_VERSION)))
+        {
+            cctx_ = nullptr;
+            close_all();
+            return;
+        }
+        const std::size_t header = LZ4F_compressBegin(cctx_, out_storage_.data(), out_storage_.size(), nullptr);
+        if (LZ4F_isError(header) || std::fwrite(out_storage_.data(), 1, header, file_) != header)
+        {
+            close_all();
+            return;
+        }
+        setp(in_storage_.data(), in_storage_.data() + in_storage_.size());
+        ok_ = true;
+    }
+
     ~Buf() override { close_all(); }
 
     [[nodiscard]] bool ok() const noexcept { return ok_; }
@@ -955,6 +1070,14 @@ class Lz4OutputStream::Buf final : public std::streambuf
 
 Lz4OutputStream::Lz4OutputStream(const std::filesystem::path &path, const bool append)
     : std::ostream(nullptr), buf_(std::make_unique<Buf>(path, append))
+{
+    rdbuf(buf_.get());
+    if (!buf_->ok())
+        setstate(std::ios::failbit);
+}
+
+Lz4OutputStream::Lz4OutputStream(stdout_tag_t)
+    : std::ostream(nullptr), buf_(std::make_unique<Buf>(stdout_tag))
 {
     rdbuf(buf_.get());
     if (!buf_->ok())
@@ -1199,4 +1322,77 @@ enum class CompressionKind
         return nullptr;
     }
     return file;
+}
+
+[[nodiscard]] std::unique_ptr<std::ostream> open_compressed_stdout(const std::string_view codec,
+                                                                   std::string *error_out)
+{
+    const auto set_err = [&](const std::string &msg) {
+        if (error_out)
+            *error_out = msg;
+    };
+
+    if (codec == "gzip" || codec == "gz")
+    {
+#if defined(WORDLIST_SORT_ZLIB)
+        auto gz = std::make_unique<GzipOutputStream>(stdout_tag);
+        if (!gz->is_open())
+        {
+            set_err("Unable to open gzip stdout compressor");
+            return nullptr;
+        }
+        return gz;
+#else
+        set_err("gzip stdout compression requires a build with zlib (WORDLIST_SORT_ZLIB)");
+        return nullptr;
+#endif
+    }
+    if (codec == "zstd" || codec == "zst")
+    {
+#if defined(WORDLIST_SORT_ZSTD)
+        auto zs = std::make_unique<ZstdOutputStream>(stdout_tag);
+        if (!zs->is_open())
+        {
+            set_err("Unable to open zstd stdout compressor");
+            return nullptr;
+        }
+        return zs;
+#else
+        set_err("zstd stdout compression requires a build with libzstd (WORDLIST_SORT_ZSTD)");
+        return nullptr;
+#endif
+    }
+    if (codec == "xz")
+    {
+#if defined(WORDLIST_SORT_LZMA)
+        auto xz = std::make_unique<XzOutputStream>(stdout_tag);
+        if (!xz->is_open())
+        {
+            set_err("Unable to open xz stdout compressor");
+            return nullptr;
+        }
+        return xz;
+#else
+        set_err("xz stdout compression requires a build with liblzma (WORDLIST_SORT_LZMA)");
+        return nullptr;
+#endif
+    }
+    if (codec == "lz4")
+    {
+#if defined(WORDLIST_SORT_LZ4)
+        auto lz = std::make_unique<Lz4OutputStream>(stdout_tag);
+        if (!lz->is_open())
+        {
+            set_err("Unable to open lz4 stdout compressor");
+            return nullptr;
+        }
+        return lz;
+#else
+        set_err("lz4 stdout compression requires a build with liblz4 (WORDLIST_SORT_LZ4)");
+        return nullptr;
+#endif
+    }
+
+    set_err(std::format("Unknown --compress '{}' (expected gzip|gz|zstd|zst|xz|lz4)", codec));
+    return nullptr;
 }
