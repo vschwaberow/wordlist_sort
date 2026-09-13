@@ -976,6 +976,41 @@ TEST(E2eCli, BloomExcludeMatchesNoBloom)
     EXPECT_EQ(test_helpers::read_text_file(out_bloom), test_helpers::read_text_file(out_plain));
 }
 
+
+TEST(E2eCli, RulesPasswordCapitalize)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path rules = work / "r.rule";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "password\n");
+    test_helpers::write_text_file(rules, "# comment\nc$1\n");
+
+    const auto result = test_helpers::run_command(
+        shell_quote(wordlist_sort_exe()) + " -q --rules " + shell_quote(rules.string()) +
+        " --sort --deduplicate -o " + shell_quote(output.string()) + " " +
+        shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    const auto text = test_helpers::read_text_file(output);
+    EXPECT_NE(text.find("password\n"), std::string::npos);
+    EXPECT_NE(text.find("Password1\n"), std::string::npos);
+}
+
+TEST(E2eCli, RulesetBasicSmoke)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "abc\n");
+    const auto result = test_helpers::run_command(
+        shell_quote(wordlist_sort_exe()) + " -q --ruleset basic --rules-max 16 --sort --deduplicate -o " +
+        shell_quote(output.string()) + " " + shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    const auto text = test_helpers::read_text_file(output);
+    EXPECT_NE(text.find("abc\n"), std::string::npos);
+    EXPECT_NE(text.find("Abc\n"), std::string::npos);
+}
+
 TEST(E2eCli, ParallelFileSplitMatchesSerial)
 {
     const auto work = test_helpers::make_temp_dir();

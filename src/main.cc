@@ -8,6 +8,7 @@
 #include "gzip_stream.hpp"
 #include "io_buffer.hpp"
 #include "membership_filter.hpp"
+#include "rules_engine.hpp"
 #include "sort_dedup.hpp"
 #include "word_pipeline.hpp"
 
@@ -124,6 +125,7 @@ constexpr std::array int_opt_specs{
     IntOptSpec{"--field", &Options::field, "Select 1-based field from each line before transforms (0=off)"},
     IntOptSpec{"--distance", &Options::distance, "Max edit distance for --fuzzy (0-3; default 1)"},
     IntOptSpec{"--bloom-bits", &Options::bloom_bits, "Bloom bits per key for early-drop (4-24; default 10)"},
+    IntOptSpec{"--rules-max", &Options::rules_max, "Max rule variants per base word incl. original (0=unlimited; default 64)"},
 };
 
 constexpr std::array str_opt_specs{
@@ -153,6 +155,8 @@ constexpr std::size_t compute_help_col_width()
         w = std::max(w, s.name.size());
     w = std::max(w, std::size_t{10});
     w = std::max(w, std::size_t{9});
+    w = std::max(w, std::string_view{"--rules <file>"}.size());
+    w = std::max(w, std::string_view{"--ruleset <name>"}.size());
     return w;
 }
 
@@ -199,6 +203,10 @@ void print_usage()
         std::println("  {:{}}  {}", std::format("{} <int>", s.name), help_col_width, s.help);
     for (const auto &s : str_opt_specs)
         std::println("  {:{}}  {}", std::format("{} <str>", s.name), help_col_width, s.help);
+    std::println("  {:{}}  {}", "--rules <file>", help_col_width,
+                 "Apply hashcat-style .rule file (repeatable; after transforms, before membership)");
+    std::println("  {:{}}  {}", "--ruleset <name>", help_col_width,
+                 "Built-in ruleset: basic (lower/cap/reverse/append/leet)");
     std::println();
     std::println("Flags:");
     for (const auto &s : flag_specs)
@@ -409,6 +417,32 @@ using ParseResult = std::expected<std::optional<ParsedArgs>, std::string>;
             continue;
         }
 
+        if (name == "--rules")
+        {
+            if (!has_inline_value)
+            {
+                if (i + 1 >= args.size())
+                    return std::unexpected("Option --rules requires a value");
+                inline_value = std::string_view{args[++i]};
+            }
+            result.options.rules_paths.emplace_back(inline_value);
+            continue;
+        }
+
+        if (name == "--ruleset")
+        {
+            if (!has_inline_value)
+            {
+                if (i + 1 >= args.size())
+                    return std::unexpected("Option --ruleset requires a value");
+                inline_value = std::string_view{args[++i]};
+            }
+            if (inline_value != "basic")
+                return std::unexpected(std::format("Unknown --ruleset '{}' (expected basic)", inline_value));
+            result.options.ruleset_basic = true;
+            continue;
+        }
+
         if (auto it = std::ranges::find(str_opt_specs, name, &StrOptSpec::name); it != str_opt_specs.end())
         {
             if (!has_inline_value)
@@ -545,6 +579,35 @@ int main(const int argc, char *argv[])
     {
         std::println(stderr, "Error: --miss is only valid with the query subcommand");
         return 1;
+    }
+
+    std::optional<RulesEngine> rules_engine;
+    if (args.options.ruleset_basic || !args.options.rules_paths.empty())
+    {
+        RulesEngine engine;
+        if (args.options.ruleset_basic)
+            engine.append_rules(RulesEngine::basic_ruleset());
+        for (const auto &path : args.options.rules_paths)
+        {
+            auto loaded = RulesEngine::load_file(path);
+            if (!loaded)
+            {
+                std::println(stderr, "Error: {}", loaded.error());
+                return 1;
+            }
+            engine.append_rules(*loaded);
+        }
+        rules_engine = std::move(engine);
+        args.options.rules = &(*rules_engine);
+        if (!args.options.quiet)
+        {
+            std::println("Loaded {} rule(s) (max {} variant(s) per word).",
+                         rules_engine->rule_count(), args.options.rules_max);
+        }
+        if (args.options.rules_max == 0 && !args.options.quiet)
+        {
+            std::println(stderr, "Warning: --rules-max 0 disables the per-word variant cap");
+        }
     }
 
     std::filesystem::path tmp_dir_path;

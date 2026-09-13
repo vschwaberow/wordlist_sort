@@ -6,6 +6,8 @@
 
 #pragma once
 
+class RulesEngine;
+
 #include <atomic>
 #include <cstdint>
 #include <cstddef>
@@ -67,6 +69,7 @@ struct Options
     bool miss = false;
     bool bloom = false;
     bool no_bloom = false;
+    bool ruleset_basic = false;
     bool force = false;
     bool skip_comments = false;
     bool append = false;
@@ -84,6 +87,8 @@ struct Options
     /// Max Levenshtein distance for --fuzzy (0..3; default 1 when fuzzy).
     int distance = 1;
     int bloom_bits = 10;
+    /// Max rule variants per base word incl. original (0 = unlimited).
+    int rules_max = 64;
     std::string delimiter = "	";
     std::string tmp_dir;
     std::string prefix;
@@ -97,9 +102,11 @@ struct Options
     std::string lookup_path;
     /// Set by `query` subcommand (index path); empty in other modes.
     std::string query_index_path;
+    std::vector<std::string> rules_paths;
     std::string filter_engine = "hash";
     std::string output_override;
     const MembershipFilter *membership = nullptr;
+    const RulesEngine *rules = nullptr;
     bool membership_exclude = true;
     /// When set, survivors are written here instead of buffered in memory (text path).
     std::ostream *stream_out = nullptr;

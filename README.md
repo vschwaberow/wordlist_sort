@@ -84,6 +84,9 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--bloom` | Force Bloom early-drop gate on membership filters |
 | `--no-bloom` | Disable Bloom early-drop (overrides auto-on for text B) |
 | `--bloom-bits <int>` | Bloom bits per key (4–24; default 10 ≈ 1% FP) |
+| `--rules <file>` | Apply hashcat-style `.rule` file (repeatable) |
+| `--ruleset basic` | Built-in rules: lower/cap/reverse/append/leet |
+| `--rules-max <int>` | Cap variants per base word incl. original (0=unlimited; default 64) |
 
 ### Flags
 
@@ -128,6 +131,18 @@ GPU transfers use **pinned host memory**. Before launching, the tool checks free
 
 
 
+
+
+## Rules engine
+
+Expand each surviving word with hashcat-compatible rule opcodes (subset) **after** transforms and **before** membership/emit:
+
+```bash
+echo password | ./build/wordlist_sort -q --rules my.rule --sort --deduplicate -o -
+./build/wordlist_sort -q --ruleset basic --rules-max 32 -o out.txt words.txt
+```
+
+Supported opcodes include `: l u c C t r d f { } [ ] D N $X ^X @X sXY oNX iNX <N >N _N`. Memory/stack opcodes and external wordlists in rules are out of scope.
 
 ## Index & Query
 
