@@ -91,6 +91,7 @@ constexpr std::array flag_specs{
     FlagSpec{"-q",             &Options::quiet,        "Short form of --quiet"},
     FlagSpec{"--progress",     &Options::progress,     "Print ingest progress to stderr (words/sec)"},
     FlagSpec{"--stats",        &Options::stats,        "Print final ingest/output counts and duration to stderr"},
+    FlagSpec{"--check-sorted", &Options::check_sorted, "Verify inputs are sorted (with --deduplicate: strictly ascending); no output write"},
     FlagSpec{"--force",        &Options::force,        "Overwrite existing output file"},
     FlagSpec{"-f",             &Options::force,        "Short form of --force"},
     FlagSpec{"--skip-comments", &Options::skip_comments, "Ignore lines whose first non-space char is #"},
@@ -464,13 +465,29 @@ int main(const int argc, char *argv[])
                 std::println(stderr, "Error: output path is a directory: {}", args.output_path.string());
                 return 1;
             }
-            if (!args.options.force && !args.options.append)
+            if (!args.options.check_sorted && !args.options.force && !args.options.append)
             {
                 std::println(stderr, "Error: output file exists (use --force to overwrite, or --append): {}",
                              args.output_path.string());
                 return 1;
             }
         }
+    }
+
+    if (args.options.check_sorted)
+    {
+        std::string check_error;
+        const bool ok = check_inputs_sorted(args.input_paths, args.options.null_separated,
+                                            args.options.skip_comments, args.options.deduplicate,
+                                            &check_error);
+        if (!ok)
+        {
+            std::println(stderr, "Error: {}", check_error);
+            return 1;
+        }
+        if (!args.options.quiet)
+            std::println(stderr, "check-sorted: ok");
+        return 0;
     }
 
     const bool stream_text = (*format == ExportFormat::Text) && !args.options.sort && !args.options.deduplicate;

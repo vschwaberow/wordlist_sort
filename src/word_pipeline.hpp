@@ -49,6 +49,7 @@ struct Options
     bool quiet = false;
     bool progress = false;
     bool stats = false;
+    bool check_sorted = false;
     bool force = false;
     bool skip_comments = false;
     bool append = false;
@@ -113,6 +114,12 @@ void trim_special_inplace(std::string &str) noexcept;
                                 std::vector<std::string> &output_words,
                                 std::atomic<std::size_t> &total_words_processed_counter,
                                 const Options &options);
+
+[[nodiscard]] bool check_inputs_sorted(const std::vector<std::filesystem::path> &paths,
+                                       bool null_separated,
+                                       bool skip_comments,
+                                       bool require_unique,
+                                       std::string *error_out);
 
 [[nodiscard]] bool process_multiple_files_parallel(const std::vector<std::filesystem::path> &paths,
                                                    std::vector<std::string> &words,

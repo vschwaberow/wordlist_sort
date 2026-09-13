@@ -563,3 +563,31 @@ TEST(E2eCli, RegexFilter)
     EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
     EXPECT_EQ(test_helpers::read_text_file(output), "123\n");
 }
+
+TEST(E2eCli, CheckSortedOk)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "a\nb\nc\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --check-sorted " + shell_quote(output.string()) + " " +
+                                                shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    EXPECT_FALSE(std::filesystem::exists(output));
+}
+
+TEST(E2eCli, CheckSortedDisorder)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "b\na\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --check-sorted " + shell_quote(output.string()) + " " +
+                                                shell_quote(input.string()));
+    EXPECT_NE(result.exit_code, 0);
+    EXPECT_NE(result.stderr_text.find("disorder"), std::string::npos) << result.stderr_text;
+}
