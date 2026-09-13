@@ -19,6 +19,7 @@ enum class ExportFormat
     Text,
     Cdb,
     Fst,
+    Pthash,
 };
 
 [[nodiscard]] std::expected<ExportFormat, std::string> parse_export_format(std::string_view text);
@@ -36,6 +37,10 @@ enum class ExportFormat
 
 [[nodiscard]] std::expected<void, std::string> write_fst(const std::vector<std::string> &words,
                                                          const std::filesystem::path &path);
+
+/// Persist PTHash + key table as WLPTH1 (requires WORDLIST_SORT_PTHASH).
+[[nodiscard]] std::expected<void, std::string> write_pthash(const std::vector<std::string> &words,
+                                                            const std::filesystem::path &path);
 
 /// Exact-key probe against an already-loaded WLTRIE1 buffer.
 [[nodiscard]] std::expected<bool, std::string> fst_contains_bytes(std::span<const unsigned char> data,

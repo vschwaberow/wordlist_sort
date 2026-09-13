@@ -35,7 +35,7 @@ public:
 [[nodiscard]] std::expected<std::unique_ptr<MembershipFilter>, std::string>
 build_membership_filter(const std::vector<std::string> &keys, FilterEngine engine);
 
-/// Open B as membership index: WLTRIE1 magic → FST, `.cdb` → CDB, else text + engine.
+/// Open B as membership index: WLTRIE1 → FST, WLPTH1 → PTHash, `.cdb` → CDB, else text + engine.
 [[nodiscard]] std::expected<std::unique_ptr<MembershipFilter>, std::string>
 open_membership_filter(const std::filesystem::path &path, FilterEngine engine);
 

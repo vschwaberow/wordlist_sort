@@ -8,6 +8,7 @@
 
 #include "export_format.hpp"
 
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <span>
@@ -28,6 +29,7 @@
 #pragma clang diagnostic ignored "-Wsign-conversion"
 #endif
 #include "include/pthash.hpp"
+#include "essentials.hpp"
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
 #elif defined(__clang__)
@@ -283,6 +285,103 @@ read_binary_file(const std::filesystem::path &path)
     return data.size() >= 8 && std::memcmp(data.data(), kMagic, 8) == 0;
 }
 
+#if defined(WORDLIST_SORT_PTHASH)
+constexpr unsigned char kWlpthMagic[8] = {'W', 'L', 'P', 'T', 'H', '1', '\0', '\0'};
+
+[[nodiscard]] bool looks_like_wlpth1(const std::span<const unsigned char> data) noexcept
+{
+    return data.size() >= 8 && std::memcmp(data.data(), kWlpthMagic, 8) == 0;
+}
+
+void write_u32_le_mf(std::ostream &out, const std::uint32_t value)
+{
+    const unsigned char bytes[4]{
+        static_cast<unsigned char>(value & 0xffu),
+        static_cast<unsigned char>((value >> 8) & 0xffu),
+        static_cast<unsigned char>((value >> 16) & 0xffu),
+        static_cast<unsigned char>((value >> 24) & 0xffu),
+    };
+    out.write(reinterpret_cast<const char *>(bytes), 4);
+}
+
+void write_u64_le_mf(std::ostream &out, const std::uint64_t value)
+{
+    write_u32_le_mf(out, static_cast<std::uint32_t>(value & 0xffffffffu));
+    write_u32_le_mf(out, static_cast<std::uint32_t>((value >> 32) & 0xffffffffu));
+}
+
+[[nodiscard]] std::uint32_t read_u32_le_mf(const unsigned char *p) noexcept
+{
+    return static_cast<std::uint32_t>(p[0]) | (static_cast<std::uint32_t>(p[1]) << 8) |
+           (static_cast<std::uint32_t>(p[2]) << 16) | (static_cast<std::uint32_t>(p[3]) << 24);
+}
+
+[[nodiscard]] std::uint64_t read_u64_le_mf(const unsigned char *p) noexcept
+{
+    return static_cast<std::uint64_t>(read_u32_le_mf(p)) |
+           (static_cast<std::uint64_t>(read_u32_le_mf(p + 4)) << 32);
+}
+
+[[nodiscard]] std::expected<std::unique_ptr<MembershipFilter>, std::string>
+open_wlpth1_file(const std::filesystem::path &path)
+{
+    auto bytes = read_binary_file(path);
+    if (!bytes)
+        return std::unexpected(bytes.error());
+    if (!looks_like_wlpth1(*bytes) || bytes->size() < 20)
+        return std::unexpected("Not a WLPTH1 PTHash file");
+
+    const auto version = read_u32_le_mf(bytes->data() + 8);
+    if (version != 1)
+        return std::unexpected(std::format("Unsupported WLPTH1 version {}", version));
+
+    const auto num_keys = read_u64_le_mf(bytes->data() + 12);
+    std::size_t off = 20;
+    std::vector<std::string> table;
+    table.reserve(static_cast<std::size_t>(num_keys));
+    for (std::uint64_t i = 0; i < num_keys; ++i)
+    {
+        if (off + 4 > bytes->size())
+            return std::unexpected("WLPTH1 key table truncated");
+        const auto len = read_u32_le_mf(bytes->data() + off);
+        off += 4;
+        if (off + static_cast<std::size_t>(len) > bytes->size())
+            return std::unexpected("WLPTH1 key table truncated");
+        table.emplace_back(reinterpret_cast<const char *>(bytes->data() + off),
+                           static_cast<std::size_t>(len));
+        off += static_cast<std::size_t>(len);
+    }
+    if (off + 8 > bytes->size())
+        return std::unexpected("WLPTH1 missing PHF blob size");
+    const auto blob_size = read_u64_le_mf(bytes->data() + off);
+    off += 8;
+    if (off + static_cast<std::size_t>(blob_size) > bytes->size())
+        return std::unexpected("WLPTH1 PHF blob truncated");
+
+    const auto phf_tmp = std::filesystem::temp_directory_path() /
+                         std::format("wordlist_sort_phf_load_{}.bin",
+                                     std::hash<std::string>{}(path.string()));
+    {
+        std::ofstream tmp(phf_tmp, std::ios::binary | std::ios::trunc);
+        if (!tmp)
+            return std::unexpected("Failed to create temporary PHF file");
+        if (blob_size > 0)
+            tmp.write(reinterpret_cast<const char *>(bytes->data() + off),
+                      static_cast<std::streamsize>(blob_size));
+        if (!tmp)
+            return std::unexpected("Failed to write temporary PHF file");
+    }
+
+    PthashMembershipFilter::pthash_type fn;
+    essentials::load(fn, phf_tmp.string().c_str());
+    {
+        std::error_code ec;
+        std::filesystem::remove(phf_tmp, ec);
+    }
+    return std::make_unique<PthashMembershipFilter>(std::move(fn), std::move(table));
+}
+#endif
+
 [[nodiscard]] std::expected<std::unique_ptr<MembershipFilter>, std::string>
 open_membership_filter(const std::filesystem::path &path, const FilterEngine engine)
 {
@@ -296,8 +395,22 @@ open_membership_filter(const std::filesystem::path &path, const FilterEngine eng
     peek.close();
 
     const bool is_fst = got == 8 && looks_like_wltrie1(std::span<const unsigned char>(magic, 8));
+#if defined(WORDLIST_SORT_PTHASH)
+    const bool is_pthash = got == 8 && looks_like_wlpth1(std::span<const unsigned char>(magic, 8));
+#else
+    const bool is_pthash = false;
+#endif
     const auto ext = path.extension().string();
     const bool is_cdb = ext == ".cdb" || ext == ".CDB";
+
+    if (is_pthash)
+    {
+#if defined(WORDLIST_SORT_PTHASH)
+        return open_wlpth1_file(path);
+#else
+        return std::unexpected("WLPTH1 file requires -DWORDLIST_SORT_PTHASH=ON");
+#endif
+    }
 
     if (is_fst || is_cdb)
     {
@@ -328,3 +441,71 @@ open_membership_filter(const std::filesystem::path &path, const FilterEngine eng
     return build_membership_filter(*keys, engine);
 }
 
+[[nodiscard]] std::expected<void, std::string> write_pthash(const std::vector<std::string> &words,
+                                                            const std::filesystem::path &path)
+{
+#if !defined(WORDLIST_SORT_PTHASH)
+    (void)words;
+    (void)path;
+    return std::unexpected("pthash format requires -DWORDLIST_SORT_PTHASH=ON at configure time");
+#else
+    std::unordered_set<std::string_view> seen;
+    seen.reserve(words.size());
+    std::vector<std::string> unique;
+    unique.reserve(words.size());
+    for (const auto &word : words)
+    {
+        if (seen.insert(word).second)
+            unique.push_back(word);
+    }
+    if (unique.empty())
+        return std::unexpected("No usable keys for PTHash output");
+
+    pthash::build_configuration config;
+    config.c = 6.0;
+    config.alpha = 0.94;
+    config.minimal_output = true;
+    config.verbose_output = false;
+    config.num_threads = 1;
+
+    PthashMembershipFilter::pthash_type fn;
+    fn.build_in_internal_memory(unique.begin(), unique.size(), config);
+
+    std::vector<std::string> table(unique.size());
+    for (const auto &key : unique)
+        table[fn(key)] = key;
+
+    const auto phf_tmp = std::filesystem::temp_directory_path() /
+                         std::format("wordlist_sort_phf_{}.bin",
+                                     std::hash<std::string>{}(unique.front() + std::to_string(unique.size())));
+    essentials::save(fn, phf_tmp.string().c_str());
+    auto blob = read_binary_file(phf_tmp);
+    {
+        std::error_code ec;
+        std::filesystem::remove(phf_tmp, ec);
+    }
+    if (!blob)
+        return std::unexpected(blob.error());
+
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out)
+        return std::unexpected(std::format("Failed to open PTHash output: {}", path.string()));
+
+    out.write(reinterpret_cast<const char *>(kWlpthMagic), 8);
+    write_u32_le_mf(out, 1);
+    write_u64_le_mf(out, static_cast<std::uint64_t>(table.size()));
+    for (const auto &key : table)
+    {
+        if (key.size() > 0xffffffffu)
+            return std::unexpected("PTHash key exceeds 4 GiB length limit");
+        write_u32_le_mf(out, static_cast<std::uint32_t>(key.size()));
+        out.write(key.data(), static_cast<std::streamsize>(key.size()));
+    }
+    write_u64_le_mf(out, static_cast<std::uint64_t>(blob->size()));
+    if (!blob->empty())
+        out.write(reinterpret_cast<const char *>(blob->data()), static_cast<std::streamsize>(blob->size()));
+    if (!out)
+        return std::unexpected(std::format("Failed to write PTHash output: {}", path.string()));
+    return {};
+#endif
+}

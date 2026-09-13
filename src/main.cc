@@ -88,7 +88,7 @@ constexpr std::array int_opt_specs{
 };
 
 constexpr std::array str_opt_specs{
-    StrOptSpec{"--format", &Options::format, "Output format: text (default), cdb (DJB Constant Database), fst (compact trie)"},
+    StrOptSpec{"--format", &Options::format, "Output format: text (default), cdb, fst (WLTRIE1), pthash (WLPTH1)"},
     StrOptSpec{"--exclude", &Options::exclude_path, "Drop words present in FILE (set difference A\\B)"},
     StrOptSpec{"--intersect", &Options::intersect_path, "Keep only words also present in FILE (A∩B)"},
     StrOptSpec{"--filter-engine", &Options::filter_engine, "Membership engine for --exclude/--intersect: hash (default), fst, pthash"},

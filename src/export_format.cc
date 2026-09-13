@@ -18,7 +18,9 @@
         return ExportFormat::Cdb;
     if (text == "fst" || text == "trie")
         return ExportFormat::Fst;
-    return std::unexpected(std::format("Unknown --format '{}' (expected text|cdb|fst)", text));
+    if (text == "pthash" || text == "mphf")
+        return ExportFormat::Pthash;
+    return std::unexpected(std::format("Unknown --format '{}' (expected text|cdb|fst|pthash)", text));
 }
 
 [[nodiscard]] const char *export_format_name(const ExportFormat format) noexcept
@@ -31,6 +33,8 @@
         return "cdb";
     case ExportFormat::Fst:
         return "fst";
+    case ExportFormat::Pthash:
+        return "pthash";
     }
     return "text";
 }
@@ -47,6 +51,8 @@
         return write_cdb(words, path);
     case ExportFormat::Fst:
         return write_fst(words, path);
+    case ExportFormat::Pthash:
+        return write_pthash(words, path);
     }
     return std::unexpected("internal: invalid export format");
 }
