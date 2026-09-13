@@ -66,14 +66,14 @@ TEST(SortDedupCpu, SortOnly)
 TEST(SortDedupCpu, DedupOnlyAnnouncesImplicitSort)
 {
     auto words = sample_words();
-    std::string captured_stdout;
+    std::string captured_stderr;
     {
-        testing::internal::CaptureStdout();
+        testing::internal::CaptureStderr();
         sort_and_deduplicate_words_cpu(words, make_sort_dedup_plan(false, true));
-        captured_stdout = testing::internal::GetCapturedStdout();
+        captured_stderr = testing::internal::GetCapturedStderr();
     }
     EXPECT_EQ(words, sorted_unique_words());
-    EXPECT_NE(captured_stdout.find("Deduplication requires sorting"), std::string::npos);
+    EXPECT_NE(captured_stderr.find("Deduplication requires sorting"), std::string::npos);
 }
 
 TEST(SortDedupCpu, EmptyList)

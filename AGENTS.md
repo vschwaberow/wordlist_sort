@@ -102,7 +102,7 @@ These are behaviors not clearly documented and easy to get wrong:
 
 - **Positional order defaults to OUTPUT first**, then inputs (`wordlist_sort <out> <in...>`). Prefer `-o`/`--output` so all positionals are inputs (`wordlist_sort -o out in1 in2`).
 - **`--noutf8`** strips bytes `>127` on every input line (independent of `--dewebify`).
-- **`--deduplicate` silently forces a sort** even without `--sort`, and prints a note to stdout. Dedup requires sorted input (`std::unique` only removes *consecutive* duplicates).
+- **`--deduplicate` implies `--sort`**: if you pass `--deduplicate` alone, the CLI auto-enables `--sort` and prints a one-line note to stderr (global dedup needs a sorted pass).
 - **Threading is one `std::async` task per input file**, gated by `--jobs` (default: `hardware_concurrency` via counting semaphore; `0` = unlimited). Each task streams its file line-by-line.
 - **`--jobs`**: omit = auto CPU count (default), `0` unlimited, `>0` cap.
 - **`--sort-chunk N`**: when `N>0` (CPU path), flush sorted temp runs during ingest every `N` words, then k-way merge (`ExternalSortBuilder`); text format merges directly to the output stream.

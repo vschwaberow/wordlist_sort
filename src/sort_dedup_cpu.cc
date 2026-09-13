@@ -57,7 +57,7 @@ void print_cuda_below_threshold_note(const std::size_t word_count, const std::si
 void announce_implicit_sort_if_needed(const SortDedupPlan &plan)
 {
     if (plan.announce_implicit_sort)
-        std::println("Note: Deduplication requires sorting. Words were sorted.");
+        std::println(stderr, "Note: Deduplication requires sorting. Words were sorted.");
 }
 
 
