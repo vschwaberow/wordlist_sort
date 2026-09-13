@@ -89,6 +89,7 @@ constexpr std::array flag_specs{
     FlagSpec{"--force",        &Options::force,        "Overwrite existing output file"},
     FlagSpec{"-f",             &Options::force,        "Short form of --force"},
     FlagSpec{"--skip-comments", &Options::skip_comments, "Ignore lines whose first non-space char is #"},
+    FlagSpec{"--append",       &Options::append,        "Append text output to an existing file (implies no truncate)"},
 };
 
 constexpr std::array int_opt_specs{
@@ -385,6 +386,11 @@ int main(const int argc, char *argv[])
         std::println(stderr, "Error: stdout (-) is only supported with --format=text");
         return 1;
     }
+    if (args.options.append && *format != ExportFormat::Text)
+    {
+        std::println(stderr, "Error: --append is only supported with --format=text");
+        return 1;
+    }
 
     const std::size_t stdin_inputs = static_cast<std::size_t>(std::count_if(
         args.input_paths.begin(), args.input_paths.end(),
@@ -405,9 +411,9 @@ int main(const int argc, char *argv[])
                 std::println(stderr, "Error: output path is a directory: {}", args.output_path.string());
                 return 1;
             }
-            if (!args.options.force)
+            if (!args.options.force && !args.options.append)
             {
-                std::println(stderr, "Error: output file exists (use --force to overwrite): {}",
+                std::println(stderr, "Error: output file exists (use --force to overwrite, or --append): {}",
                              args.output_path.string());
                 return 1;
             }
@@ -437,7 +443,9 @@ int main(const int argc, char *argv[])
         }
         else
         {
-            stream_file.open(args.output_path, std::ios::binary | std::ios::trunc);
+            const auto stream_mode =
+                std::ios::binary | (args.options.append ? std::ios::app : std::ios::trunc);
+            stream_file.open(args.output_path, stream_mode);
             if (!stream_file)
             {
                 std::println(stderr, "Error: Failed to open output file for writing: {}", args.output_path.string());
@@ -536,7 +544,9 @@ int main(const int argc, char *argv[])
             }
             else
             {
-                std::ofstream out_file(args.output_path, std::ios::binary | std::ios::trunc);
+                const auto out_mode =
+                    std::ios::binary | (args.options.append ? std::ios::app : std::ios::trunc);
+                std::ofstream out_file(args.output_path, out_mode);
                 if (!out_file)
                 {
                     std::println(stderr, "Error: Failed to open output file for writing: {}", args.output_path.string());
@@ -556,7 +566,7 @@ int main(const int argc, char *argv[])
         {
             external_builder->finish(words);
             args.options.external_sort = nullptr;
-            if (const auto write_result = write_export(words, args.output_path, *format); !write_result)
+            if (const auto write_result = write_export(words, args.output_path, *format, args.options.append); !write_result)
             {
                 std::println(stderr, "Error: {}", write_result.error());
                 return 1;
@@ -576,7 +586,7 @@ int main(const int argc, char *argv[])
                                                    .tmp_dir = tmp_dir_path,
                                                });
 
-            if (const auto write_result = write_export(words, args.output_path, *format); !write_result)
+            if (const auto write_result = write_export(words, args.output_path, *format, args.options.append); !write_result)
             {
                 std::println(stderr, "Error: {}", write_result.error());
                 return 1;

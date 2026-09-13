@@ -41,15 +41,17 @@
 
 [[nodiscard]] std::expected<void, std::string> write_export(const std::vector<std::string> &words,
                                                             const std::filesystem::path &path,
-                                                            const ExportFormat format)
+                                                            const ExportFormat format, const bool append)
 {
     if (path == "-" && format != ExportFormat::Text)
         return std::unexpected("stdout (-) is only supported with --format=text");
+    if (append && format != ExportFormat::Text)
+        return std::unexpected("--append is only supported with --format=text");
 
     switch (format)
     {
     case ExportFormat::Text:
-        return write_lines(words, path);
+        return write_lines(words, path, append);
     case ExportFormat::Cdb:
         return write_cdb(words, path);
     case ExportFormat::Fst:
