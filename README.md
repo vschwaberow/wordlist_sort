@@ -80,6 +80,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--special-trim` | Trim non-alphanumeric chars from beginning and end of words |
 | `--dup-remove` | Collapse consecutive duplicate characters within words |
 | `--lower` | Convert to lowercase |
+| `--upper` | Convert to uppercase (wins over `--lower` if both set) |
 | `--wordify` | Split lines into whitespace-separated words |
 | `--no-numbers` | Discard all-numeric words |
 | `--detab` | Remove leading tabs/spaces |

@@ -32,6 +32,7 @@ struct Options
     bool special_trim = false;
     bool dup_remove = false;
     bool lower = false;
+    bool upper = false;
     bool no_numbers = false;
     bool hash_remove = false;
     bool email_sort = false;
@@ -84,6 +85,7 @@ struct Options
 [[nodiscard]] constexpr bool is_space_char(char c) noexcept;
 [[nodiscard]] constexpr bool is_hex_char(char c) noexcept;
 [[nodiscard]] constexpr char to_lower_char(char c) noexcept;
+[[nodiscard]] constexpr char to_upper_char(char c) noexcept;
 
 [[nodiscard]] std::string strip_html_tags(std::string_view html);
 

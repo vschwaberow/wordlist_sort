@@ -56,6 +56,11 @@ namespace fs = std::filesystem;
     return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + ('a' - 'A')) : c;
 }
 
+[[nodiscard]] constexpr char to_upper_char(const char c) noexcept
+{
+    return (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
+}
+
 [[nodiscard]] std::string strip_html_tags(const std::string_view html)
 {
     std::string result;
@@ -125,6 +130,8 @@ void trim_special_inplace(std::string &str) noexcept
 
     if (options.lower)
         std::ranges::transform(processed, processed.begin(), to_lower_char);
+    if (options.upper)
+        std::ranges::transform(processed, processed.begin(), to_upper_char);
 
     if (options.digit_trim)
         trim_digits_inplace(processed);
