@@ -335,19 +335,23 @@ TEST(E2eCli, AppendTextOutput)
 TEST(E2eCli, NullSeparatedIo)
 {
     const auto work = test_helpers::make_temp_dir();
+    fs::create_directories(work);
     const fs::path input = work / "in.null";
     const fs::path output = work / "out.null";
     {
         std::ofstream out(input, std::ios::binary);
+        ASSERT_TRUE(out) << input;
         out << "b" << '\0' << "a" << '\0' << "b" << '\0';
+        ASSERT_TRUE(out);
     }
 
     const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
                                                 " -q --null --sort --deduplicate -f " +
                                                 shell_quote(output.string()) + " " +
                                                 shell_quote(input.string()));
-    EXPECT_EQ(result.exit_code, 0);
-    const auto got = test_helpers::read_text_file(output);
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    std::ifstream in(output, std::ios::binary);
+    const std::string got{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
     std::string expected;
     expected.push_back('a');
     expected.push_back('\0');

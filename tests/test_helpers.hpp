@@ -21,8 +21,9 @@ inline std::string read_text_file(const std::filesystem::path &path)
 inline std::filesystem::path make_temp_dir()
 {
     const auto base = std::filesystem::temp_directory_path() / "wordlist_sort_test";
-    std::filesystem::create_directories(base);
-    return base / std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const auto dir = base / std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    std::filesystem::create_directories(dir);
+    return dir;
 }
 
 inline void write_text_file(const std::filesystem::path &path, const std::string_view content)
