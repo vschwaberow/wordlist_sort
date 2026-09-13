@@ -431,8 +431,10 @@ open_membership_filter(const std::filesystem::path &path, const FilterEngine eng
 
         if (const auto probe = cdb_contains_bytes(*bytes, ""); !probe)
             return std::unexpected(probe.error());
-        // Key count unknown without a full scan; status line shows 0.
-        return std::make_unique<CdbMembershipFilter>(std::move(*bytes), 0);
+        const auto count = cdb_key_count(*bytes);
+        if (!count)
+            return std::unexpected(count.error());
+        return std::make_unique<CdbMembershipFilter>(std::move(*bytes), *count);
     }
 
     const auto keys = load_filter_keys(path);

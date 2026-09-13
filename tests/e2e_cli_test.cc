@@ -5,6 +5,7 @@
 #include "test_helpers.hpp"
 
 #include <filesystem>
+#include <fstream>
 #include <gtest/gtest.h>
 #include <string>
 
@@ -98,4 +99,17 @@ TEST(E2eCli, CudaFlagBehavior)
 #else
     EXPECT_NE(result.stderr_text.find("built without CUDA support"), std::string::npos);
 #endif
+}
+
+TEST(E2eCli, OutputFlagTreatsPositionalsAsInputs)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "z\na\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) + " --sort -o " +
+                                                shell_quote(output.string()) + " " + shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0);
+    EXPECT_EQ(test_helpers::read_text_file(output), "a\nz\n");
 }
