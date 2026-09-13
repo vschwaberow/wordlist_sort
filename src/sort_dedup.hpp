@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <mutex>
+#include <filesystem>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -27,6 +28,7 @@ struct SortDedupOptions
     /// When >0 and word count exceeds this, spill sorted runs to temp files and k-way merge.
     std::size_t sort_chunk = 0;
     bool quiet = false;
+    std::filesystem::path tmp_dir; // empty = system temp
 };
 
 struct SortDedupPlan
@@ -72,13 +74,15 @@ void merge_sorted_word_runs(std::vector<std::vector<std::string>> runs,
 void sort_and_deduplicate_words_external(std::vector<std::string> &words,
                                          const SortDedupPlan &plan,
                                          std::size_t chunk_words,
-                                         bool quiet = false);
+                                         bool quiet = false,
+                                         const std::filesystem::path &tmp_dir = {});
 
 /// Incremental external sort: push words during ingest; flush runs at `chunk_words`; finish merges.
 class ExternalSortBuilder
 {
 public:
-    ExternalSortBuilder(SortDedupPlan plan, std::size_t chunk_words, bool quiet = false);
+    ExternalSortBuilder(SortDedupPlan plan, std::size_t chunk_words, bool quiet = false,
+                        std::filesystem::path tmp_dir = {});
 
     void push(std::string word);
     /// Flush remaining buffer and k-way merge into `out`.
@@ -97,6 +101,7 @@ private:
     SortDedupPlan plan_{};
     std::size_t chunk_words_ = 0;
     bool quiet_ = false;
+    std::filesystem::path tmp_dir_;
     std::size_t pushed_ = 0;
     std::mutex mutex_;
     std::vector<std::string> buffer_;

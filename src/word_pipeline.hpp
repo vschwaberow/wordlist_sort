@@ -48,6 +48,7 @@ struct Options
     /// Parallel input workers: -1 = auto (default; omit --jobs), 0 = unlimited, >0 = cap.
     int jobs = -1;
     int sort_chunk = 0;
+    std::string tmp_dir;
     std::string format = "text";
     std::string exclude_path;
     std::string intersect_path;

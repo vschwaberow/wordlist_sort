@@ -40,6 +40,11 @@
 namespace
 {
 
+[[nodiscard]] std::filesystem::path resolve_filter_tmp_dir(const std::filesystem::path &tmp_dir)
+{
+    return tmp_dir.empty() ? std::filesystem::temp_directory_path() : tmp_dir;
+}
+
 class HashMembershipFilter final : public MembershipFilter
 {
 public:
@@ -191,7 +196,8 @@ load_filter_keys(const std::filesystem::path &path)
 }
 
 [[nodiscard]] std::expected<std::unique_ptr<MembershipFilter>, std::string>
-build_membership_filter(const std::vector<std::string> &keys, const FilterEngine engine)
+build_membership_filter(const std::vector<std::string> &keys, const FilterEngine engine,
+                        const std::filesystem::path &tmp_dir)
 {
     auto unique = unique_keys(keys);
     if (unique.empty())
@@ -206,7 +212,7 @@ build_membership_filter(const std::vector<std::string> &keys, const FilterEngine
     }
     case FilterEngine::Fst:
     {
-        const auto tmp = std::filesystem::temp_directory_path() /
+        const auto tmp = resolve_filter_tmp_dir(tmp_dir) /
                          std::format("wordlist_sort_filter_{}.fst",
                                      std::hash<std::string>{}(unique.front() + std::to_string(unique.size())));
         if (const auto written = write_fst(unique, tmp); !written)
@@ -383,7 +389,8 @@ open_wlpth1_file(const std::filesystem::path &path)
 #endif
 
 [[nodiscard]] std::expected<std::unique_ptr<MembershipFilter>, std::string>
-open_membership_filter(const std::filesystem::path &path, const FilterEngine engine)
+open_membership_filter(const std::filesystem::path &path, const FilterEngine engine,
+                       const std::filesystem::path &tmp_dir)
 {
     std::ifstream peek(path, std::ios::binary);
     if (!peek)
@@ -440,15 +447,17 @@ open_membership_filter(const std::filesystem::path &path, const FilterEngine eng
     const auto keys = load_filter_keys(path);
     if (!keys)
         return std::unexpected(keys.error());
-    return build_membership_filter(*keys, engine);
+    return build_membership_filter(*keys, engine, tmp_dir);
 }
 
 [[nodiscard]] std::expected<void, std::string> write_pthash(const std::vector<std::string> &words,
-                                                            const std::filesystem::path &path)
+                                                            const std::filesystem::path &path,
+                                                            const std::filesystem::path &tmp_dir)
 {
 #if !defined(WORDLIST_SORT_PTHASH)
     (void)words;
     (void)path;
+    (void)tmp_dir;
     return std::unexpected("pthash format requires -DWORDLIST_SORT_PTHASH=ON at configure time");
 #else
     std::unordered_set<std::string_view> seen;
@@ -477,7 +486,7 @@ open_membership_filter(const std::filesystem::path &path, const FilterEngine eng
     for (const auto &key : unique)
         table[fn(key)] = key;
 
-    const auto phf_tmp = std::filesystem::temp_directory_path() /
+    const auto phf_tmp = resolve_filter_tmp_dir(tmp_dir) /
                          std::format("wordlist_sort_phf_{}.bin",
                                      std::hash<std::string>{}(unique.front() + std::to_string(unique.size())));
     essentials::save(fn, phf_tmp.string().c_str());

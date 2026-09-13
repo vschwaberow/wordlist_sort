@@ -33,11 +33,13 @@ public:
 };
 
 [[nodiscard]] std::expected<std::unique_ptr<MembershipFilter>, std::string>
-build_membership_filter(const std::vector<std::string> &keys, FilterEngine engine);
+build_membership_filter(const std::vector<std::string> &keys, FilterEngine engine,
+                        const std::filesystem::path &tmp_dir = {});
 
 /// Open B as membership index: WLTRIE1 → FST, WLPTH1 → PTHash, `.cdb` → CDB, else text + engine.
 [[nodiscard]] std::expected<std::unique_ptr<MembershipFilter>, std::string>
-open_membership_filter(const std::filesystem::path &path, FilterEngine engine);
+open_membership_filter(const std::filesystem::path &path, FilterEngine engine,
+                       const std::filesystem::path &tmp_dir = {});
 
 [[nodiscard]] std::expected<std::vector<std::string>, std::string>
 load_filter_keys(const std::filesystem::path &path);

@@ -130,9 +130,15 @@ void sort_and_deduplicate_words_cpu(std::vector<std::string> &words, const SortD
 namespace
 {
 
-[[nodiscard]] std::filesystem::path make_run_temp_path(const std::size_t index)
+[[nodiscard]] std::filesystem::path resolve_tmp_dir(const std::filesystem::path &tmp_dir)
 {
-    return std::filesystem::temp_directory_path() /
+    return tmp_dir.empty() ? std::filesystem::temp_directory_path() : tmp_dir;
+}
+
+[[nodiscard]] std::filesystem::path make_run_temp_path(const std::size_t index,
+                                                       const std::filesystem::path &tmp_dir)
+{
+    return resolve_tmp_dir(tmp_dir) /
            std::format("wordlist_sort_run_{}_{}.txt",
                        std::hash<std::thread::id>{}(std::this_thread::get_id()), index);
 }
@@ -286,7 +292,8 @@ void remove_run_files(const std::vector<std::filesystem::path> &run_paths)
 void sort_and_deduplicate_words_external(std::vector<std::string> &words,
                                          const SortDedupPlan &plan,
                                          const std::size_t chunk_words,
-                                         const bool quiet)
+                                         const bool quiet,
+                                         const std::filesystem::path &tmp_dir)
 {
     if (chunk_words == 0 || words.size() <= chunk_words)
     {
@@ -310,7 +317,7 @@ void sort_and_deduplicate_words_external(std::vector<std::string> &words,
                                        words.begin() + static_cast<std::ptrdiff_t>(end));
         sort_and_deduplicate_words_cpu(chunk, chunk_plan);
 
-        const auto path = make_run_temp_path(run_paths.size());
+        const auto path = make_run_temp_path(run_paths.size(), tmp_dir);
         if (!write_run_file(chunk, path))
         {
             remove_run_files(run_paths);
@@ -332,8 +339,9 @@ void sort_and_deduplicate_words_external(std::vector<std::string> &words,
 }
 
 ExternalSortBuilder::ExternalSortBuilder(const SortDedupPlan plan, const std::size_t chunk_words,
-                                           const bool quiet)
-    : plan_(plan), chunk_words_(chunk_words == 0 ? 1 : chunk_words), quiet_(quiet)
+                                           const bool quiet, std::filesystem::path tmp_dir)
+    : plan_(plan), chunk_words_(chunk_words == 0 ? 1 : chunk_words), quiet_(quiet),
+      tmp_dir_(std::move(tmp_dir))
 {
     buffer_.reserve(chunk_words_);
 }
@@ -348,7 +356,7 @@ void ExternalSortBuilder::flush_unlocked()
                                    .announce_implicit_sort = false};
     sort_and_deduplicate_words_cpu(buffer_, chunk_plan);
 
-    const auto path = make_run_temp_path(run_paths_.size());
+    const auto path = make_run_temp_path(run_paths_.size(), tmp_dir_);
     if (!write_run_file(buffer_, path))
     {
         std::println(stderr, "Warning: external sort builder failed to write a run; keeping words in memory.");
@@ -492,7 +500,8 @@ void sort_and_deduplicate_words(std::vector<std::string> &words, const SortDedup
     }
 
     if (options.sort_chunk > 0 && words.size() > options.sort_chunk)
-        sort_and_deduplicate_words_external(words, plan, options.sort_chunk, options.quiet);
+        sort_and_deduplicate_words_external(words, plan, options.sort_chunk, options.quiet,
+                                           options.tmp_dir);
     else
         sort_and_deduplicate_words_cpu(words, plan);
 }
