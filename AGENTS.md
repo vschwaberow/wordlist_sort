@@ -104,6 +104,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **Compressed inputs**: transparent inflate for `.gz` (zlib) and `.zst`/`.zstd` (libzstd) on ingest and text `--exclude`/`--intersect` sources (`WORDLIST_SORT_ZLIB` / `WORDLIST_SORT_ZSTD`, default ON). Detected by extension or magic; stdin stays raw.
 - **`-` means stdio**: input `-` reads stdin (at most once); output `-` writes `--format=text` to stdout and forces quiet. Non-text formats refuse stdout.
 - **`--noutf8`** strips bytes `>127` on every input line (independent of `--dewebify`).
+- **`--skip-comments`**: drop lines whose first non-space/tab character is `#` (before other line transforms).
 - **`-f` / `--force`**: required to overwrite an existing output path; stdout `-` is always allowed. Directories as output are always rejected.
 - **`--limit N`**: cap accepted survivors during ingest (`0` = off). Parallel-safe; stops reading further lines once full. Applies before sort/dedup (output may be smaller after dedup).
 - **`--progress`**: ingest ticker on stderr (works with `-q` / stdout `-`; does not write to stdout).

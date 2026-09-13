@@ -331,6 +331,13 @@ void trim_special_inplace(std::string &str) noexcept
         if (!line_str.empty() && line_str.back() == '\r')
             line_str.pop_back();
 
+        if (options.skip_comments)
+        {
+            const auto first = line_str.find_first_not_of(" \t");
+            if (first != std::string::npos && line_str[first] == '#')
+                continue;
+        }
+
         if (options.dewebify)
             line_str = strip_html_tags(line_str);
 

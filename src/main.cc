@@ -88,6 +88,7 @@ constexpr std::array flag_specs{
     FlagSpec{"--progress",     &Options::progress,     "Print ingest progress to stderr (words/sec)"},
     FlagSpec{"--force",        &Options::force,        "Overwrite existing output file"},
     FlagSpec{"-f",             &Options::force,        "Short form of --force"},
+    FlagSpec{"--skip-comments", &Options::skip_comments, "Ignore lines whose first non-space char is #"},
 };
 
 constexpr std::array int_opt_specs{
