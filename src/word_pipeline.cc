@@ -5,6 +5,7 @@
 // Copyright (c) 2026 Volker Schwaberow
 
 #include "word_pipeline.hpp"
+#include "rules_engine.hpp"
 #include "gzip_stream.hpp"
 #include "io_buffer.hpp"
 #include "membership_filter.hpp"
@@ -418,32 +419,45 @@ void trim_special_inplace(std::string &str) noexcept
             return true;
         };
 
-        if (options.fuzzy && options.membership != nullptr)
-        {
-            const auto matches = options.membership->fuzzy_search(*processed, options.distance);
-            if (!matches)
-            {
-                std::println(stderr, "Error: {}", matches.error());
-                return;
-            }
-            for (const auto &match : *matches)
-            {
-                if (limit_reached())
-                    break;
-                if (!emit_one(match))
-                    break;
-            }
-            return;
-        }
+        std::vector<std::string> candidates;
+        if (options.rules != nullptr)
+            candidates = options.rules->expand(*processed, options.rules_max);
+        else
+            candidates.push_back(std::move(*processed));
 
-        if (options.membership != nullptr)
+        for (auto &variant : candidates)
         {
-            const bool hit = options.membership->contains(*processed);
-            const bool drop = options.membership_exclude ? hit : !hit;
-            if (drop)
-                return;
+            if (limit_reached())
+                break;
+
+            if (options.fuzzy && options.membership != nullptr)
+            {
+                const auto matches = options.membership->fuzzy_search(variant, options.distance);
+                if (!matches)
+                {
+                    std::println(stderr, "Error: {}", matches.error());
+                    return;
+                }
+                for (const auto &match : *matches)
+                {
+                    if (limit_reached())
+                        break;
+                    if (!emit_one(match))
+                        break;
+                }
+                continue;
+            }
+
+            if (options.membership != nullptr)
+            {
+                const bool hit = options.membership->contains(variant);
+                const bool drop = options.membership_exclude ? hit : !hit;
+                if (drop)
+                    continue;
+            }
+            if (!emit_one(std::move(variant)))
+                break;
         }
-        static_cast<void>(emit_one(std::move(*processed)));
     };
 
     const auto handle_line = [&](std::string line_str) {

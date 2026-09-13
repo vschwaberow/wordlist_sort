@@ -58,6 +58,7 @@ set(WORDLIST_SORT_CORE_SOURCES
     src/cdb_export.cc
     src/fst_export.cc
     src/membership_filter.cc
+    src/rules_engine.cc
     src/gzip_stream.cc)
 
 add_executable(wordlist_sort
