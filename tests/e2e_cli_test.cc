@@ -867,6 +867,88 @@ TEST(E2eCli, FuzzyRequiresFstLookup)
     EXPECT_NE(result.exit_code, 0);
 }
 
+
+TEST(E2eCli, IndexQueryFstHitAndMiss)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path dict = work / "dict.txt";
+    const fs::path index = work / "dict.fst";
+    const fs::path queries = work / "queries.txt";
+    const fs::path hits = work / "hits.txt";
+    const fs::path misses = work / "misses.txt";
+    test_helpers::write_text_file(dict, "alpha\nbeta\ngamma\n");
+    test_helpers::write_text_file(queries, "beta\nzeta\nalpha\n");
+
+    const auto build = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                 " -q index " + shell_quote(index.string()) + " " +
+                                                 shell_quote(dict.string()));
+    EXPECT_EQ(build.exit_code, 0) << build.stderr_text;
+    EXPECT_TRUE(fs::exists(index));
+
+    const auto hit = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                              " -q query --sort -o " + shell_quote(hits.string()) + " " +
+                                              shell_quote(index.string()) + " " +
+                                              shell_quote(queries.string()));
+    EXPECT_EQ(hit.exit_code, 0) << hit.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(hits), "alpha\nbeta\n");
+
+    const auto miss = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                               " -q query --miss --sort -o " +
+                                               shell_quote(misses.string()) + " " +
+                                               shell_quote(index.string()) + " " +
+                                               shell_quote(queries.string()));
+    EXPECT_EQ(miss.exit_code, 0) << miss.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(misses), "zeta\n");
+}
+
+TEST(E2eCli, IndexForceOverwrite)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path dict = work / "dict.txt";
+    const fs::path index = work / "dict.cdb";
+    test_helpers::write_text_file(dict, "one\ntwo\n");
+    test_helpers::write_text_file(index, "stale");
+
+    const auto blocked = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                   " -q index " + shell_quote(index.string()) + " " +
+                                                   shell_quote(dict.string()));
+    EXPECT_NE(blocked.exit_code, 0);
+
+    const auto forced = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                  " -q -f index " + shell_quote(index.string()) + " " +
+                                                  shell_quote(dict.string()));
+    EXPECT_EQ(forced.exit_code, 0) << forced.stderr_text;
+
+    const fs::path queries = work / "q.txt";
+    const fs::path out = work / "out.txt";
+    test_helpers::write_text_file(queries, "two\nmissing\n");
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                  " -q query --sort -o " + shell_quote(out.string()) + " " +
+                                                  shell_quote(index.string()) + " " +
+                                                  shell_quote(queries.string()));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(out), "two\n");
+}
+
+TEST(E2eCli, QueryMutuallyExclusiveWithLookup)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path dict = work / "dict.txt";
+    const fs::path index = work / "dict.cdb";
+    const fs::path queries = work / "q.txt";
+    test_helpers::write_text_file(dict, "a\n");
+    test_helpers::write_text_file(queries, "a\n");
+    const auto build = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                 " -q index --format=cdb " + shell_quote(index.string()) +
+                                                 " " + shell_quote(dict.string()));
+    EXPECT_EQ(build.exit_code, 0) << build.stderr_text;
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                  " -q query --lookup " + shell_quote(index.string()) +
+                                                  " " + shell_quote(index.string()) + " " +
+                                                  shell_quote(queries.string()));
+    EXPECT_NE(result.exit_code, 0);
+}
+
 TEST(E2eCli, ParallelFileSplitMatchesSerial)
 {
     const auto work = test_helpers::make_temp_dir();

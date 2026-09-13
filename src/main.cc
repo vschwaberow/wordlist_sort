@@ -88,7 +88,8 @@ constexpr std::array flag_specs{
     FlagSpec{"--sort",         &Options::sort,         "Sort the output words lexicographically"},
     FlagSpec{"--ignore-case",  &Options::ignore_case,  "Case-insensitive sort/dedup/check-sorted (keep original form)"},
     FlagSpec{"--recursive",    &Options::recursive,    "Recurse into directory inputs for .txt and compressed wordlists"},
-    FlagSpec{"--fuzzy",        &Options::fuzzy,        "Fuzzy lookup via Levenshtein on FST (--lookup WLTRIE1 required)"},
+    FlagSpec{"--fuzzy",        &Options::fuzzy,        "Fuzzy lookup via Levenshtein on FST (--lookup or query on WLTRIE1)"},
+    FlagSpec{"--miss",         &Options::miss,         "With query: emit non-hits instead of hits"},
     FlagSpec{"-r",             &Options::recursive,    "Short form of --recursive"},
     FlagSpec{"--deduplicate",  &Options::deduplicate,  "Remove duplicate words (implies --sort)"},
     FlagSpec{"--cuda",         &Options::cuda,         "Use GPU for sort/dedup when built with CUDA and word count exceeds threshold"},
@@ -175,8 +176,16 @@ void print_usage()
 {
     std::println("Usage: {} [OPTIONS] <output> <input> [input ...]", PROGRAM_NAME);
     std::println("   or: {} [OPTIONS] -o <output> <input> [input ...]", PROGRAM_NAME);
+    std::println("   or: {} index [OPTIONS] <index-out> <input> [input ...]", PROGRAM_NAME);
+    std::println("   or: {} query [OPTIONS] [-o <out>] <index> <query-input> [query-input ...]", PROGRAM_NAME);
     std::println();
     std::println("A high-performance tool for processing, filtering, and sorting wordlists.");
+    std::println();
+    std::println("Subcommands:");
+    std::println("  {:{}}  Build a membership index (implies --sort --deduplicate; format from --format or extension)",
+                 "index", help_col_width);
+    std::println("  {:{}}  Probe queries against an index (default output stdout; --miss emits non-hits)",
+                 "query", help_col_width);
     std::println();
     std::println("Arguments:");
     std::println("  {:{}}  Output file path, or - for stdout (or use -o/--output)", "<output>", help_col_width);
@@ -196,11 +205,19 @@ void print_usage()
     std::println("  {:{}}  Display version information and exit", "--version", help_col_width);
 }
 
+enum class CliMode
+{
+    Sort,
+    Index,
+    Query,
+};
+
 struct ParsedArgs
 {
     Options options;
     fs::path output_path;
     std::vector<fs::path> input_paths;
+    CliMode mode = CliMode::Sort;
 };
 
 
@@ -407,6 +424,34 @@ using ParseResult = std::expected<std::optional<ParsedArgs>, std::string>;
         positionals.emplace_back(arg);
     }
 
+    if (!positionals.empty())
+    {
+        if (positionals[0] == "index")
+        {
+            result.mode = CliMode::Index;
+            positionals.erase(positionals.begin());
+        }
+        else if (positionals[0] == "query")
+        {
+            result.mode = CliMode::Query;
+            positionals.erase(positionals.begin());
+        }
+    }
+
+    if (result.mode == CliMode::Query)
+    {
+        if (positionals.size() < 2)
+            return std::unexpected("Missing required arguments: query <index> <query-input>...");
+        result.options.query_index_path = positionals[0];
+        for (std::size_t i = 1; i < positionals.size(); ++i)
+            result.input_paths.emplace_back(positionals[i]);
+        if (!result.options.output_override.empty())
+            result.output_path = result.options.output_override;
+        else
+            result.output_path = "-";
+        return std::optional{std::move(result)};
+    }
+
     if (!result.options.output_override.empty())
     {
         if (positionals.empty())
@@ -418,7 +463,9 @@ using ParseResult = std::expected<std::optional<ParsedArgs>, std::string>;
     else
     {
         if (positionals.empty())
-            return std::unexpected("Missing required argument: <output>");
+            return std::unexpected(result.mode == CliMode::Index
+                                      ? "Missing required argument: <index-out>"
+                                      : "Missing required argument: <output>");
         if (positionals.size() < 2)
             return std::unexpected("Missing required argument: <input>");
         result.output_path = positionals[0];
@@ -474,6 +521,29 @@ int main(const int argc, char *argv[])
         args.options.sort = true;
     }
 
+    if (args.mode == CliMode::Index)
+    {
+        args.options.sort = true;
+        args.options.deduplicate = true;
+        if (args.options.format == "text")
+        {
+            if (const auto inferred = infer_export_format_from_path(args.output_path))
+                args.options.format = export_format_name(*inferred);
+            else
+            {
+                std::println(stderr,
+                             "Error: index requires --format=cdb|fst|pthash or an extension .cdb/.fst/.pthash/.wlp");
+                return 1;
+            }
+        }
+    }
+
+    if (args.options.miss && args.mode != CliMode::Query)
+    {
+        std::println(stderr, "Error: --miss is only valid with the query subcommand");
+        return 1;
+    }
+
     std::filesystem::path tmp_dir_path;
     if (!args.options.tmp_dir.empty())
     {
@@ -503,9 +573,14 @@ int main(const int argc, char *argv[])
         std::println(stderr, "Error: --exclude, --intersect, and --lookup are mutually exclusive");
         return 1;
     }
+    if (args.mode == CliMode::Query && membership_modes > 0)
+    {
+        std::println(stderr, "Error: query is mutually exclusive with --exclude, --intersect, and --lookup");
+        return 1;
+    }
 
     std::unique_ptr<MembershipFilter> membership_filter;
-    const bool use_membership = membership_modes == 1;
+    const bool use_membership = membership_modes == 1 || args.mode == CliMode::Query;
     if (use_membership)
     {
         const auto engine = parse_filter_engine(args.options.filter_engine);
@@ -515,10 +590,15 @@ int main(const int argc, char *argv[])
             return 1;
         }
 
-        const std::filesystem::path filter_path = !args.options.exclude_path.empty() ? args.options.exclude_path
-                                                 : !args.options.intersect_path.empty()
-                                                       ? args.options.intersect_path
-                                                       : args.options.lookup_path;
+        std::filesystem::path filter_path;
+        if (args.mode == CliMode::Query)
+            filter_path = args.options.query_index_path;
+        else if (!args.options.exclude_path.empty())
+            filter_path = args.options.exclude_path;
+        else if (!args.options.intersect_path.empty())
+            filter_path = args.options.intersect_path;
+        else
+            filter_path = args.options.lookup_path;
         auto filter = open_membership_filter(filter_path, *engine, tmp_dir_path);
         if (!filter)
         {
@@ -528,10 +608,15 @@ int main(const int argc, char *argv[])
 
         membership_filter = std::move(*filter);
         args.options.membership = membership_filter.get();
-        args.options.membership_exclude = !args.options.exclude_path.empty();
+        if (args.mode == CliMode::Query)
+            args.options.membership_exclude = args.options.miss;
+        else
+            args.options.membership_exclude = !args.options.exclude_path.empty();
         if (!args.options.quiet)
         {
-            const char *mode = args.options.membership_exclude                          ? "exclude"
+            const char *mode = args.mode == CliMode::Query
+                                   ? (args.options.miss ? "query-miss" : "query")
+                               : args.options.membership_exclude                          ? "exclude"
                                : !args.options.lookup_path.empty()                      ? "lookup"
                                                                                         : "intersect";
             std::println("Built {} filter via {} ({} keys); streaming inputs with early drop.", mode,
@@ -541,9 +626,11 @@ int main(const int argc, char *argv[])
 
     if (args.options.fuzzy)
     {
-        if (args.options.lookup_path.empty())
+        const bool fuzzy_ok_context =
+            !args.options.lookup_path.empty() || args.mode == CliMode::Query;
+        if (!fuzzy_ok_context)
         {
-            std::println(stderr, "Error: --fuzzy requires --lookup on a WLTRIE1 FST index");
+            std::println(stderr, "Error: --fuzzy requires --lookup or query on a WLTRIE1 FST index");
             return 1;
         }
         if (args.options.distance < 0 || args.options.distance > 3)
@@ -554,7 +641,7 @@ int main(const int argc, char *argv[])
         if (!use_membership || membership_filter == nullptr ||
             std::string_view{membership_filter->backend_name()} != "fst")
         {
-            std::println(stderr, "Error: --fuzzy requires --lookup against a WLTRIE1 FST index");
+            std::println(stderr, "Error: --fuzzy requires a WLTRIE1 FST index");
             return 1;
         }
     }
@@ -563,6 +650,12 @@ int main(const int argc, char *argv[])
     if (!format)
     {
         std::println(stderr, "Error: {}", format.error());
+        return 1;
+    }
+
+    if (args.mode == CliMode::Index && *format == ExportFormat::Text)
+    {
+        std::println(stderr, "Error: index mode cannot write text; use --format=cdb|fst|pthash");
         return 1;
     }
 
