@@ -6,6 +6,7 @@
 #include "test_helpers.hpp"
 
 #include <gtest/gtest.h>
+#include <filesystem>
 #include <sstream>
 #include <vector>
 
@@ -120,6 +121,8 @@ TEST(SortDedupDispatch, CudaIgnoredWithoutCudaBuild)
                                             .sort = true,
                                             .deduplicate = true,
                                             .use_cuda = true,
+                                            .quiet = false,
+                                            .tmp_dir = {},
                                         });
     EXPECT_EQ(words, sorted_unique_words());
 }
@@ -132,6 +135,8 @@ TEST(SortDedupDispatch, ThresholdUsesCpuPath)
                                             .deduplicate = true,
                                             .use_cuda = true,
                                             .cuda_threshold = 1'000'000,
+                                            .quiet = false,
+                                            .tmp_dir = {},
                                         });
     EXPECT_EQ(words, sorted_unique_words());
 }
@@ -186,8 +191,8 @@ TEST(SortDedup, ExternalSortChunkDedups)
         words.push_back("a" + std::to_string(i));
     }
     auto copy = words;
-    sort_and_deduplicate_words(copy, SortDedupOptions{.sort = true, .deduplicate = true, .sort_chunk = 0});
-    sort_and_deduplicate_words(words, SortDedupOptions{.sort = true, .deduplicate = true, .sort_chunk = 7});
+    sort_and_deduplicate_words(copy, SortDedupOptions{.sort = true, .deduplicate = true, .sort_chunk = 0, .quiet = false, .tmp_dir = {}});
+    sort_and_deduplicate_words(words, SortDedupOptions{.sort = true, .deduplicate = true, .sort_chunk = 7, .quiet = false, .tmp_dir = {}});
     EXPECT_EQ(words, copy);
     EXPECT_FALSE(words.empty());
 }
@@ -209,7 +214,7 @@ TEST(SortDedup, ExternalSortBuilderIngest)
         expected.push_back("w" + std::to_string(i % 7));
         expected.push_back("z" + std::to_string(i));
     }
-    sort_and_deduplicate_words(expected, SortDedupOptions{.sort = true, .deduplicate = true});
+    sort_and_deduplicate_words(expected, SortDedupOptions{.sort = true, .deduplicate = true, .quiet = false, .tmp_dir = {}});
     EXPECT_EQ(out, expected);
     EXPECT_EQ(builder.pushed(), 46u);
 }
@@ -226,11 +231,24 @@ TEST(SortDedup, ExternalSortBuilderFinishToStream)
     std::vector<std::string> expected;
     for (int i = 0; i < 20; ++i)
         expected.push_back("k" + std::to_string(i % 5));
-    sort_and_deduplicate_words(expected, SortDedupOptions{.sort = true, .deduplicate = true});
+    sort_and_deduplicate_words(expected, SortDedupOptions{.sort = true, .deduplicate = true, .quiet = false, .tmp_dir = {}});
 
     std::ostringstream expect_oss;
     for (const auto &w : expected)
         expect_oss << w << '\n';
     EXPECT_EQ(n, expected.size());
     EXPECT_EQ(oss.str(), expect_oss.str());
+}
+
+TEST(SortDedup, ExternalSortBuilderUsesTmpDir)
+{
+    const auto dir = test_helpers::make_temp_dir() / "runs";
+    std::filesystem::create_directories(dir);
+    ExternalSortBuilder builder(make_sort_dedup_plan(true, true), 2, true, dir);
+    builder.push("b");
+    builder.push("a");
+    builder.push("c");
+    std::ostringstream oss;
+    EXPECT_EQ(builder.finish_to_stream(oss), 3u);
+    EXPECT_EQ(oss.str(), "a\nb\nc\n");
 }

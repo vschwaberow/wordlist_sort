@@ -20,6 +20,7 @@
 #include <fstream>
 #include <format>
 #include <optional>
+#include <system_error>
 #include <print>
 #include <ranges>
 #include <expected>
@@ -100,6 +101,7 @@ constexpr std::array str_opt_specs{
     StrOptSpec{"--filter-engine", &Options::filter_engine, "Membership engine for --exclude/--intersect: hash (default), fst, pthash"},
     StrOptSpec{"--output", &Options::output_override, "Output file path (alternative to positional <output>)"},
     StrOptSpec{"-o", &Options::output_override, "Short form of --output"},
+    StrOptSpec{"--tmp-dir", &Options::tmp_dir, "Directory for external-sort / filter temp files (default: system temp)"},
 };
 
 constexpr std::size_t compute_help_col_width()
@@ -301,6 +303,19 @@ int main(const int argc, char *argv[])
         args.options.sort = true;
     }
 
+    std::filesystem::path tmp_dir_path;
+    if (!args.options.tmp_dir.empty())
+    {
+        tmp_dir_path = args.options.tmp_dir;
+        std::error_code ec;
+        std::filesystem::create_directories(tmp_dir_path, ec);
+        if (ec || !std::filesystem::is_directory(tmp_dir_path))
+        {
+            std::println(stderr, "Error: --tmp-dir is not a usable directory: {}", args.options.tmp_dir);
+            return 1;
+        }
+    }
+
     if (!args.options.quiet)
     {
         std::println("{} version {} by {} ({} {} {})", PROGRAM_NAME, PROGRAM_VERSION, PROGRAM_AUTHOR, BUILD_DATE,
@@ -330,7 +345,7 @@ int main(const int argc, char *argv[])
         const std::filesystem::path filter_path = !args.options.exclude_path.empty()
                                                       ? args.options.exclude_path
                                                       : args.options.intersect_path;
-        auto filter = open_membership_filter(filter_path, *engine);
+        auto filter = open_membership_filter(filter_path, *engine, tmp_dir_path);
         if (!filter)
         {
             std::println(stderr, "Error: {}", filter.error());
@@ -384,7 +399,7 @@ int main(const int argc, char *argv[])
     {
         const auto plan = make_sort_dedup_plan(args.options.sort, args.options.deduplicate);
         external_builder.emplace(plan, static_cast<std::size_t>(args.options.sort_chunk),
-                                  args.options.quiet);
+                                  args.options.quiet, tmp_dir_path);
         args.options.external_sort = &(*external_builder);
         if (!args.options.quiet)
             std::println("External sort ingest flush enabled (chunk={}).", args.options.sort_chunk);
@@ -442,6 +457,8 @@ int main(const int argc, char *argv[])
                                                    .cuda_timing = args.options.cuda_timing,
                                                    .cuda_threshold = static_cast<std::size_t>(args.options.cuda_threshold),
                                                    .sort_chunk = static_cast<std::size_t>(args.options.sort_chunk),
+                                                   .quiet = args.options.quiet,
+                                                   .tmp_dir = tmp_dir_path,
                                                });
 
             if (const auto write_result = write_export(words, args.output_path, *format); !write_result)
