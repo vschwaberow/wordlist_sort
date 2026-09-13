@@ -175,3 +175,18 @@ TEST(MergeSortedRuns, KeepsDuplicatesWhenDisabled)
     EXPECT_EQ(out, (std::vector<std::string>{"a", "a", "b", "c"}));
 }
 
+
+TEST(SortDedup, ExternalSortChunkDedups)
+{
+    std::vector<std::string> words;
+    for (int i = 0; i < 50; ++i)
+    {
+        words.push_back("w" + std::to_string(i % 20));
+        words.push_back("a" + std::to_string(i));
+    }
+    auto copy = words;
+    sort_and_deduplicate_words(copy, SortDedupOptions{.sort = true, .deduplicate = true, .sort_chunk = 0});
+    sort_and_deduplicate_words(words, SortDedupOptions{.sort = true, .deduplicate = true, .sort_chunk = 7});
+    EXPECT_EQ(words, copy);
+    EXPECT_FALSE(words.empty());
+}

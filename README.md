@@ -57,6 +57,8 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--minlen <int>` | Filter out words shorter than N chars |
 | `--dup-sense <int>` | Remove word if any single char exceeds N% (0–100) |
 | `--cuda-threshold <int>` | Minimum word count before GPU sort/dedup (default: 10000000; `0` = auto ≈100k; requires `--cuda`) |
+| `--jobs <int>` | Parallel input workers: omit = auto (`hardware_concurrency`), `0` = unlimited, `>0` = cap |
+| `--sort-chunk <int>` | External CPU sort/dedup: max words per temp run (`0` = off; spills when the list is larger) |
 | `--format <str>` | Output format: `text` (default), `cdb`, `fst` (WLTRIE1), `pthash` (WLPTH1) |
 | `--exclude <file>` | Drop words that occur in FILE (set difference A\\B) |
 | `--intersect <file>` | Keep only words that also occur in FILE (A∩B) |
@@ -110,6 +112,8 @@ Build a membership index from FILE B **first**, then **stream** input files (A) 
 `--exclude` and `--intersect` are mutually exclusive. Input files are read as a line stream (no full-file buffer); peak RAM is dominated by B's filter plus surviving words from A.
 
 When `--format=text` is used **without** `--sort`/`--deduplicate`, survivors are written directly to the output file during ingest (no in-memory word buffer). Sort/dedup and binary formats (`cdb`/`fst`/`pthash`) still buffer survivors.
+
+With `--sort-chunk N` (and `--sort` and/or `--deduplicate`), the CPU path spills sorted runs of at most `N` words to temp files, clears the in-memory list, then k-way merges — peak RAM drops after the spill even though ingest still buffers until the first flush boundary.
 
 B may be a plain text wordlist **or** a previously exported index:
 - `WLTRIE1` (`.fst` from `--format=fst`) — detected by magic; `--filter-engine` ignored
