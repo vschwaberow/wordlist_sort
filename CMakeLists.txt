@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 project(wordlist_sort LANGUAGES CXX)
 
 set(PROJECT_NAME "wordlist_sort")
-set(PROJECT_VERSION "0.3.0")
+set(PROJECT_VERSION "0.4.0")
 set(PROJECT_AUTHOR "Volker Schwaberow <volker@schwaberow.de>")
 set(PROJECT_COPYRIGHT "Copyright (c) 2024-2026 Volker Schwaberow")
 
@@ -48,7 +48,10 @@ option(WORDLIST_SORT_NATIVE_ARCH "Add -march=native on GCC/Clang (non-portable)"
 
 set(WORDLIST_SORT_CORE_SOURCES
     src/word_pipeline.cc
-    src/sort_dedup_cpu.cc)
+    src/sort_dedup_cpu.cc
+    src/export_format.cc
+    src/cdb_export.cc
+    src/fst_export.cc)
 
 add_executable(wordlist_sort
     src/main.cc
