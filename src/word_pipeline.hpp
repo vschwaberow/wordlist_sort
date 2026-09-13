@@ -13,6 +13,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <mutex>
+#include <ostream>
 #include <vector>
 
 class MembershipFilter;
@@ -47,6 +49,10 @@ struct Options
     std::string filter_engine = "hash";
     const MembershipFilter *membership = nullptr;
     bool membership_exclude = true;
+    /// When set, survivors are written here instead of buffered in memory (text path).
+    std::ostream *stream_out = nullptr;
+    std::mutex *stream_mutex = nullptr;
+    std::atomic<std::size_t> *stream_emitted = nullptr;
 };
 
 [[nodiscard]] constexpr bool is_digit_char(char c) noexcept;

@@ -109,6 +109,8 @@ Build a membership index from FILE B **first**, then **stream** input files (A) 
 
 `--exclude` and `--intersect` are mutually exclusive. Input files are read as a line stream (no full-file buffer); peak RAM is dominated by B's filter plus surviving words from A.
 
+When `--format=text` is used **without** `--sort`/`--deduplicate`, survivors are written directly to the output file during ingest (no in-memory word buffer). Sort/dedup and binary formats (`cdb`/`fst`/`pthash`) still buffer survivors.
+
 B may be a plain text wordlist **or** a previously exported index:
 - `WLTRIE1` (`.fst` from `--format=fst`) — detected by magic; `--filter-engine` ignored
 - `.cdb` (from `--format=cdb`) — detected by extension; `--filter-engine` ignored
