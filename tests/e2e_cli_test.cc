@@ -693,3 +693,53 @@ TEST(E2eCli, IgnoreCaseCheckSorted)
                                                   shell_quote(input.string()));
     EXPECT_NE(strict.exit_code, 0);
 }
+
+TEST(E2eCli, GlobInputs)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path a = work / "a.txt";
+    const fs::path b = work / "b.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(a, "alpha\n");
+    test_helpers::write_text_file(b, "beta\n");
+
+    const auto pattern = (work / "*.txt").string();
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --sort -o " + shell_quote(output.string()) + " " +
+                                                shell_quote(pattern));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(output), "alpha\nbeta\n");
+}
+
+TEST(E2eCli, GlobNoMatchFails)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path output = work / "out.txt";
+    const auto pattern = (work / "missing-*.txt").string();
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q -o " + shell_quote(output.string()) + " " +
+                                                shell_quote(pattern));
+    EXPECT_NE(result.exit_code, 0);
+}
+
+TEST(E2eCli, RecursiveDirectoryInputs)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path sub = work / "sub";
+    fs::create_directories(sub);
+    test_helpers::write_text_file(sub / "a.txt", "one\n");
+    test_helpers::write_text_file(sub / "b.txt", "two\n");
+    test_helpers::write_text_file(sub / "skip.bin", "nope\n");
+    const fs::path output = work / "out.txt";
+
+    const auto denied = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                  " -q --sort -o " + shell_quote(output.string()) + " " +
+                                                  shell_quote(sub.string()));
+    EXPECT_NE(denied.exit_code, 0);
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q -r --sort -o " + shell_quote(output.string()) + " " +
+                                                shell_quote(sub.string()));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(output), "one\ntwo\n");
+}

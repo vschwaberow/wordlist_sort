@@ -22,6 +22,7 @@
 #include <fstream>
 #include <iostream>
 #include <format>
+#include <glob.h>
 #include <optional>
 #include <system_error>
 #include <print>
@@ -85,6 +86,8 @@ constexpr std::array flag_specs{
     FlagSpec{"--noutf8",       &Options::noutf8,       "Keep only ASCII characters (0-127) on each input line"},
     FlagSpec{"--sort",         &Options::sort,         "Sort the output words lexicographically"},
     FlagSpec{"--ignore-case",  &Options::ignore_case,  "Case-insensitive sort/dedup/check-sorted (keep original form)"},
+    FlagSpec{"--recursive",    &Options::recursive,    "Recurse into directory inputs for .txt and compressed wordlists"},
+    FlagSpec{"-r",             &Options::recursive,    "Short form of --recursive"},
     FlagSpec{"--deduplicate",  &Options::deduplicate,  "Remove duplicate words (implies --sort)"},
     FlagSpec{"--cuda",         &Options::cuda,         "Use GPU for sort/dedup when built with CUDA and word count exceeds threshold"},
     FlagSpec{"--no-cuda",      &Options::no_cuda,      "Force CPU sort/dedup even when CUDA is available"},
@@ -194,6 +197,120 @@ struct ParsedArgs
     fs::path output_path;
     std::vector<fs::path> input_paths;
 };
+
+
+[[nodiscard]] bool looks_like_glob(const std::string_view s) noexcept
+{
+    return s.find_first_of("*?[") != std::string_view::npos;
+}
+
+[[nodiscard]] bool is_txt_extension(const fs::path &path) noexcept
+{
+    const auto ext = path.extension().string();
+    return ext.size() == 4 && ext[0] == '.' &&
+           (ext[1] == 't' || ext[1] == 'T') &&
+           (ext[2] == 'x' || ext[2] == 'X') &&
+           (ext[3] == 't' || ext[3] == 'T');
+}
+
+[[nodiscard]] bool is_recursive_ingest_file(const fs::path &path) noexcept
+{
+    std::error_code ec;
+    if (!fs::is_regular_file(path, ec))
+        return false;
+    return is_txt_extension(path) || path_looks_gzip(path) || path_looks_zstd(path) ||
+           path_looks_xz(path) || path_looks_lz4(path);
+}
+
+[[nodiscard]] Expected<void> collect_recursive_dir(const fs::path &dir, std::vector<fs::path> &out)
+{
+    std::error_code ec;
+    for (fs::recursive_directory_iterator it(dir, fs::directory_options::skip_permission_denied, ec), end;
+         it != end; it.increment(ec))
+    {
+        if (ec)
+            return std::unexpected(std::format("Unable to read directory {}: {}", dir.string(), ec.message()));
+        if (is_recursive_ingest_file(it->path()))
+            out.push_back(it->path());
+    }
+    return {};
+}
+
+[[nodiscard]] Expected<void> append_expanded_path(const fs::path &path, const bool recursive,
+                                                  std::vector<fs::path> &out)
+{
+    std::error_code ec;
+    if (fs::is_directory(path, ec))
+    {
+        if (!recursive)
+            return std::unexpected(
+                std::format("Input path is a directory (use --recursive / -r): {}", path.string()));
+        return collect_recursive_dir(path, out);
+    }
+    out.push_back(path);
+    return {};
+}
+
+[[nodiscard]] Expected<std::vector<fs::path>> expand_input_paths(const std::vector<fs::path> &inputs,
+                                                                 const bool recursive)
+{
+    std::vector<fs::path> expanded;
+    expanded.reserve(inputs.size());
+
+    for (const auto &raw : inputs)
+    {
+        if (is_stdio_path(raw))
+        {
+            expanded.push_back(raw);
+            continue;
+        }
+
+        std::error_code ec;
+        if (fs::exists(raw, ec))
+        {
+            if (auto r = append_expanded_path(raw, recursive, expanded); !r)
+                return std::unexpected(std::move(r).error());
+            continue;
+        }
+
+        const std::string pattern = raw.string();
+        if (!looks_like_glob(pattern))
+        {
+            // Keep literal missing paths for the existing open-time error path.
+            expanded.push_back(raw);
+            continue;
+        }
+
+        glob_t g{};
+        const int rc = ::glob(pattern.c_str(), GLOB_NOSORT, nullptr, &g);
+        if (rc == GLOB_NOMATCH)
+        {
+            ::globfree(&g);
+            return std::unexpected(std::format("Glob matched no files: {}", pattern));
+        }
+        if (rc != 0)
+        {
+            ::globfree(&g);
+            return std::unexpected(std::format("Glob failed for pattern: {}", pattern));
+        }
+
+        for (std::size_t i = 0; i < g.gl_pathc; ++i)
+        {
+            if (auto r = append_expanded_path(fs::path{g.gl_pathv[i]}, recursive, expanded); !r)
+            {
+                ::globfree(&g);
+                return std::unexpected(std::move(r).error());
+            }
+        }
+        ::globfree(&g);
+    }
+
+    std::ranges::sort(expanded);
+    const auto [first, last] = std::ranges::unique(expanded);
+    expanded.erase(first, last);
+    return expanded;
+}
+
 
 using ParseResult = std::expected<std::optional<ParsedArgs>, std::string>;
 
@@ -324,6 +441,16 @@ int main(const int argc, char *argv[])
         return 0;
 
     auto &args = **parse_result;
+
+    if (auto expanded = expand_input_paths(args.input_paths, args.options.recursive); !expanded)
+    {
+        std::println(stderr, "Error: {}", expanded.error());
+        return 1;
+    }
+    else
+    {
+        args.input_paths = std::move(*expanded);
+    }
 
     // Writing word data to stdout must not mix with banners/status on stdout.
     if (is_stdio_path(args.output_path))
