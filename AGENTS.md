@@ -142,6 +142,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **Prefer `constexpr noexcept` free functions** for byte-classification (`is_digit_char`, `is_alpha_char`, `is_alnum_char`) rather than `<cctype>` — keeps the checks locale-independent and branchless-friendly.
 - **Transformations mutate in place** (`*_inplace` suffix) where possible.
 - **`inline constexpr const char*`** is used (not `constexpr std::string_view`) for the build-metadata globals derived from CMake macros.
+- **Do not bump `PROJECT_VERSION` unless the user explicitly asks.** Version numbers are owner-controlled; feature PRs leave `CMakeLists.txt` `PROJECT_VERSION` unchanged.
 - **Project metadata is injected via `add_definitions(...)`** in `CMakeLists.txt` (the older mechanism), not `target_compile_definitions`. `PROJECT_NAME`/`PROJECT_VERSION`/`PROJECT_AUTHOR`/`PROJECT_COPYRIGHT`/`BUILD_PLATFORM_INFO`/`COMPILER_INFO_STRING` become preprocessor macros. If you add new metadata, follow the same `add_definitions` pattern for consistency.
 
 ## clangd / LSP Setup
