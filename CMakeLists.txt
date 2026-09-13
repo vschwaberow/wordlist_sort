@@ -49,7 +49,7 @@ option(WORDLIST_SORT_PTHASH "Enable PTHash membership engine for --exclude/--int
 option(WORDLIST_SORT_ZLIB "Enable transparent gzip (.gz) input/output via zlib" ON)
 option(WORDLIST_SORT_ZSTD "Enable transparent zstd (.zst) input/output via libzstd" ON)
 option(WORDLIST_SORT_LZMA "Enable transparent xz (.xz) input/output via liblzma" ON)
-option(WORDLIST_SORT_LZ4 "Enable transparent lz4 (.lz4) input via liblz4" ON)
+option(WORDLIST_SORT_LZ4 "Enable transparent lz4 (.lz4) input/output via liblz4" ON)
 
 set(WORDLIST_SORT_CORE_SOURCES
     src/word_pipeline.cc

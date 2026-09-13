@@ -311,6 +311,28 @@ TEST(E2eCli, XzTextOutput)
 #endif
 }
 
+TEST(E2eCli, Lz4TextOutput)
+{
+#if !defined(WORDLIST_SORT_LZ4)
+    GTEST_SKIP() << "built without liblz4";
+#else
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path lz4_out = work / "out.txt.lz4";
+    const fs::path plain_out = work / "out.txt";
+    test_helpers::write_text_file(input, "c\na\nb\na\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --sort --deduplicate " + shell_quote(lz4_out.string()) +
+                                                " " + shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0);
+
+    const int z = std::system(("lz4 -dc " + shell_quote(lz4_out.string()) + " > " + shell_quote(plain_out.string())).c_str());
+    ASSERT_EQ(z, 0);
+    EXPECT_EQ(test_helpers::read_text_file(plain_out), "a\nb\nc\n");
+#endif
+}
+
 TEST(E2eCli, ZstdInput)
 {
 #if !defined(WORDLIST_SORT_ZSTD)

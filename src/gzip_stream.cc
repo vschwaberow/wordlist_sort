@@ -829,6 +829,146 @@ bool Lz4InputStream::is_open() const noexcept
     return buf_ && buf_->ok();
 }
 
+
+class Lz4OutputStream::Buf final : public std::streambuf
+{
+  public:
+    Buf(const std::filesystem::path &path, const bool append)
+        : file_(std::fopen(path.string().c_str(), append ? "ab" : "wb")),
+          in_storage_(1 << 16),
+          out_storage_(LZ4F_compressBound(1 << 16, nullptr) + LZ4F_HEADER_SIZE_MAX)
+    {
+        if (file_ == nullptr)
+            return;
+        if (LZ4F_isError(LZ4F_createCompressionContext(&cctx_, LZ4F_VERSION)))
+        {
+            cctx_ = nullptr;
+            close_all();
+            return;
+        }
+        const std::size_t header = LZ4F_compressBegin(cctx_, out_storage_.data(), out_storage_.size(), nullptr);
+        if (LZ4F_isError(header) || std::fwrite(out_storage_.data(), 1, header, file_) != header)
+        {
+            close_all();
+            return;
+        }
+        setp(in_storage_.data(), in_storage_.data() + in_storage_.size());
+        ok_ = true;
+    }
+
+    ~Buf() override { close_all(); }
+
+    [[nodiscard]] bool ok() const noexcept { return ok_; }
+
+  protected:
+    int_type overflow(int_type ch) override
+    {
+        if (!flush_put_area())
+            return traits_type::eof();
+        if (traits_type::eq_int_type(ch, traits_type::eof()))
+            return traits_type::not_eof(ch);
+        *pptr() = traits_type::to_char_type(ch);
+        pbump(1);
+        return ch;
+    }
+
+    std::streamsize xsputn(const char *s, std::streamsize n) override
+    {
+        if (!ok_ || n <= 0)
+            return 0;
+        std::streamsize done = 0;
+        while (done < n)
+        {
+            const auto space = epptr() - pptr();
+            if (space == 0)
+            {
+                if (!flush_put_area())
+                    return done;
+                continue;
+            }
+            const auto chunk = std::min<std::streamsize>(n - done, space);
+            std::memcpy(pptr(), s + done, static_cast<std::size_t>(chunk));
+            pbump(static_cast<int>(chunk));
+            done += chunk;
+        }
+        return done;
+    }
+
+    int sync() override
+    {
+        if (!flush_put_area())
+            return -1;
+        const std::size_t n = LZ4F_flush(cctx_, out_storage_.data(), out_storage_.size(), nullptr);
+        if (LZ4F_isError(n))
+            return -1;
+        if (n > 0 && std::fwrite(out_storage_.data(), 1, n, file_) != n)
+            return -1;
+        return 0;
+    }
+
+  private:
+    [[nodiscard]] bool flush_put_area()
+    {
+        if (!ok_ || cctx_ == nullptr)
+            return false;
+        const auto pending = static_cast<std::size_t>(pptr() - pbase());
+        if (pending == 0)
+            return true;
+        const std::size_t n =
+            LZ4F_compressUpdate(cctx_, out_storage_.data(), out_storage_.size(), pbase(), pending, nullptr);
+        if (LZ4F_isError(n))
+            return false;
+        if (n > 0 && std::fwrite(out_storage_.data(), 1, n, file_) != n)
+            return false;
+        pbump(-static_cast<int>(pending));
+        return true;
+    }
+
+    void close_all()
+    {
+        if (ok_ && cctx_ != nullptr && file_ != nullptr)
+        {
+            static_cast<void>(flush_put_area());
+            const std::size_t n = LZ4F_compressEnd(cctx_, out_storage_.data(), out_storage_.size(), nullptr);
+            if (!LZ4F_isError(n) && n > 0)
+                static_cast<void>(std::fwrite(out_storage_.data(), 1, n, file_));
+        }
+        if (cctx_ != nullptr)
+        {
+            LZ4F_freeCompressionContext(cctx_);
+            cctx_ = nullptr;
+        }
+        if (file_ != nullptr)
+        {
+            std::fclose(file_);
+            file_ = nullptr;
+        }
+        ok_ = false;
+    }
+
+    FILE *file_ = nullptr;
+    LZ4F_cctx *cctx_ = nullptr;
+    std::vector<char> in_storage_;
+    std::vector<char> out_storage_;
+    bool ok_ = false;
+};
+
+Lz4OutputStream::Lz4OutputStream(const std::filesystem::path &path, const bool append)
+    : std::ostream(nullptr), buf_(std::make_unique<Buf>(path, append))
+{
+    rdbuf(buf_.get());
+    if (!buf_->ok())
+        setstate(std::ios::failbit);
+}
+
+Lz4OutputStream::~Lz4OutputStream() = default;
+
+bool Lz4OutputStream::is_open() const noexcept
+{
+    return buf_ && buf_->ok();
+}
+
+
 #endif
 
 namespace {
@@ -1028,6 +1168,24 @@ enum class CompressionKind
 #else
         if (error_out)
             *error_out = "xz output requires a build with liblzma (WORDLIST_SORT_LZMA)";
+        return nullptr;
+#endif
+    }
+
+    if (path_looks_lz4(path))
+    {
+#if defined(WORDLIST_SORT_LZ4)
+        auto lz = std::make_unique<Lz4OutputStream>(path, append);
+        if (!lz->is_open())
+        {
+            if (error_out)
+                *error_out = "Unable to open lz4 output file: " + path.string();
+            return nullptr;
+        }
+        return lz;
+#else
+        if (error_out)
+            *error_out = "lz4 output requires a build with liblz4 (WORDLIST_SORT_LZ4)";
         return nullptr;
 #endif
     }
