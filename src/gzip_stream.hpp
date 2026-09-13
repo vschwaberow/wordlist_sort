@@ -13,6 +13,7 @@
 
 [[nodiscard]] bool path_looks_gzip(const std::filesystem::path &path) noexcept;
 [[nodiscard]] bool path_looks_zstd(const std::filesystem::path &path) noexcept;
+[[nodiscard]] bool path_looks_xz(const std::filesystem::path &path) noexcept;
 
 #if defined(WORDLIST_SORT_ZLIB)
 
@@ -56,7 +57,28 @@ class ZstdInputStream final : public std::istream
 
 #endif
 
+#if defined(WORDLIST_SORT_LZMA)
+
+/// Decompressing input stream over an xz file (liblzma stream decoder).
+class XzInputStream final : public std::istream
+{
+  public:
+    explicit XzInputStream(const std::filesystem::path &path);
+    ~XzInputStream() override;
+
+    XzInputStream(const XzInputStream &) = delete;
+    XzInputStream &operator=(const XzInputStream &) = delete;
+
+    [[nodiscard]] bool is_open() const noexcept;
+
+  private:
+    class Buf;
+    std::unique_ptr<Buf> buf_;
+};
+
+#endif
+
 /// Open a path as a line-oriented input stream. Owns the stream.
-/// Optional transparent inflate for gzip / zstd (extension or magic).
+/// Optional transparent inflate for gzip / zstd / xz (extension or magic).
 [[nodiscard]] std::unique_ptr<std::istream> open_input_stream(const std::filesystem::path &path,
                                                               std::string *error_out);

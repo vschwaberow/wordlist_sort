@@ -360,3 +360,25 @@ TEST(E2eCli, NullSeparatedIo)
     EXPECT_EQ(got, expected);
 }
 
+TEST(E2eCli, XzInput)
+{
+#if !defined(WORDLIST_SORT_LZMA)
+    GTEST_SKIP() << "built without liblzma";
+#else
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path plain = work / "in.txt";
+    const fs::path xz = work / "in.txt.xz";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(plain, "c\na\nb\na\n");
+
+    const int z = std::system(("xz -q -k -f -c " + shell_quote(plain.string()) + " > " + shell_quote(xz.string())).c_str());
+    ASSERT_EQ(z, 0);
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --sort --deduplicate " + shell_quote(output.string()) + " " +
+                                                shell_quote(xz.string()));
+    EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(output), "a\nb\nc\n");
+#endif
+}
+
