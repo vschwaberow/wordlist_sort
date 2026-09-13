@@ -389,6 +389,76 @@ void trim_special_inplace(std::string &str) noexcept
     return true;
 }
 
+
+[[nodiscard]] bool check_inputs_sorted(const std::vector<fs::path> &paths,
+                                       const bool null_separated,
+                                       const bool skip_comments,
+                                       const bool require_unique,
+                                       std::string *error_out)
+{
+    const char sep = null_separated ? '\0' : '\n';
+    std::string prev;
+    bool have_prev = false;
+    std::size_t line_no = 0;
+
+    for (const auto &path : paths)
+    {
+        std::unique_ptr<std::istream> owned_in;
+        std::istream *in = nullptr;
+        if (is_stdio_path(path))
+        {
+            in = &std::cin;
+        }
+        else
+        {
+            std::string open_error;
+            owned_in = open_input_stream(path, &open_error);
+            if (!owned_in)
+            {
+                if (error_out)
+                    *error_out = open_error;
+                return false;
+            }
+            in = owned_in.get();
+        }
+
+        BufferedRecordReader reader(*in, sep);
+        std::string rec;
+        while (reader.next(rec))
+        {
+            ++line_no;
+            if (skip_comments)
+            {
+                const auto first = rec.find_first_not_of(" \t");
+                if (first != std::string::npos && rec[first] == '#')
+                    continue;
+            }
+            if (have_prev)
+            {
+                const bool ok = require_unique ? (prev < rec) : !(prev > rec);
+                if (!ok)
+                {
+                    if (error_out)
+                        *error_out = std::format(
+                            "{} at record {} (file {}): \"{}\" then \"{}\"",
+                            require_unique ? "not strictly ascending" : "disorder",
+                            line_no, path.string(), prev, rec);
+                    return false;
+                }
+            }
+            prev = std::move(rec);
+            have_prev = true;
+        }
+        if (in->bad())
+        {
+            if (error_out)
+                *error_out = std::format("Unable to read file: {}", path.string());
+            return false;
+        }
+    }
+    return true;
+}
+
 [[nodiscard]] std::size_t resolve_job_limit(const int jobs, const std::size_t path_count) noexcept
 {
     if (path_count == 0)

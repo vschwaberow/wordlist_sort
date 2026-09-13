@@ -99,6 +99,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--cuda-timing` | Print CUDA phase timings (H2D / sort / dedup / D2H) to stderr |
 | `--progress` | Print ingest progress to stderr (avg + recent words/sec) |
 | `--stats` | Print final ingest/output counts and duration to stderr |
+| `--check-sorted` | Verify inputs are sorted (exit 0/1; no output write; with `--deduplicate`: strict) |
 | `-f`, `--force` | Overwrite an existing output file (refused by default) |
 | `--skip-comments` | Ignore lines whose first non-whitespace character is `#` |
 | `--append` | Append text output to an existing file instead of truncating (text only; no `--force` needed) |
