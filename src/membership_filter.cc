@@ -8,7 +8,9 @@
 
 #include "export_format.hpp"
 
+#include <cstring>
 #include <fstream>
+#include <span>
 #include <system_error>
 #include <format>
 #include <unordered_set>
@@ -47,6 +49,7 @@ public:
     }
 
     [[nodiscard]] std::size_t size() const noexcept override { return keys_.size(); }
+    [[nodiscard]] const char *backend_name() const noexcept override { return "hash"; }
 
 private:
     std::unordered_set<std::string> keys_;
@@ -55,30 +58,44 @@ private:
 class FstMembershipFilter final : public MembershipFilter
 {
 public:
-    explicit FstMembershipFilter(std::filesystem::path path, const std::size_t size)
-        : path_(std::move(path)), size_(size)
+    explicit FstMembershipFilter(std::vector<unsigned char> data, const std::size_t size)
+        : data_(std::move(data)), size_(size)
     {
     }
-
-    ~FstMembershipFilter() override
-    {
-        std::error_code ec;
-        std::filesystem::remove(path_, ec);
-    }
-
-    FstMembershipFilter(const FstMembershipFilter &) = delete;
-    FstMembershipFilter &operator=(const FstMembershipFilter &) = delete;
 
     [[nodiscard]] bool contains(const std::string_view key) const override
     {
-        const auto result = fst_contains(path_, key);
+        const auto result = fst_contains_bytes(data_, key);
         return result && *result;
     }
 
     [[nodiscard]] std::size_t size() const noexcept override { return size_; }
+    [[nodiscard]] const char *backend_name() const noexcept override { return "fst"; }
 
 private:
-    std::filesystem::path path_;
+    std::vector<unsigned char> data_;
+    std::size_t size_ = 0;
+};
+
+class CdbMembershipFilter final : public MembershipFilter
+{
+public:
+    explicit CdbMembershipFilter(std::vector<unsigned char> data, const std::size_t size)
+        : data_(std::move(data)), size_(size)
+    {
+    }
+
+    [[nodiscard]] bool contains(const std::string_view key) const override
+    {
+        const auto result = cdb_contains_bytes(data_, key);
+        return result && *result;
+    }
+
+    [[nodiscard]] std::size_t size() const noexcept override { return size_; }
+    [[nodiscard]] const char *backend_name() const noexcept override { return "cdb"; }
+
+private:
+    std::vector<unsigned char> data_;
     std::size_t size_ = 0;
 };
 
@@ -102,6 +119,7 @@ public:
     }
 
     [[nodiscard]] std::size_t size() const noexcept override { return table_.size(); }
+    [[nodiscard]] const char *backend_name() const noexcept override { return "pthash"; }
 
 private:
     pthash_type fn_;
@@ -191,7 +209,30 @@ build_membership_filter(const std::vector<std::string> &keys, const FilterEngine
                                      std::hash<std::string>{}(unique.front() + std::to_string(unique.size())));
         if (const auto written = write_fst(unique, tmp); !written)
             return std::unexpected(written.error());
-        return std::make_unique<FstMembershipFilter>(tmp, unique.size());
+
+        std::ifstream in(tmp, std::ios::binary);
+        if (!in)
+        {
+            std::error_code ec;
+            std::filesystem::remove(tmp, ec);
+            return std::unexpected("Failed to reopen temporary FST filter");
+        }
+        in.seekg(0, std::ios::end);
+        const auto file_size = static_cast<std::size_t>(in.tellg());
+        in.seekg(0);
+        std::vector<unsigned char> data(file_size);
+        if (file_size > 0 &&
+            !in.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(file_size)))
+        {
+            std::error_code ec;
+            std::filesystem::remove(tmp, ec);
+            return std::unexpected("Failed to read temporary FST filter");
+        }
+        {
+            std::error_code ec;
+            std::filesystem::remove(tmp, ec);
+        }
+        return std::make_unique<FstMembershipFilter>(std::move(data), unique.size());
     }
     case FilterEngine::Pthash:
     {
@@ -219,3 +260,71 @@ build_membership_filter(const std::vector<std::string> &keys, const FilterEngine
     }
     return std::unexpected("internal: invalid filter engine");
 }
+
+[[nodiscard]] std::expected<std::vector<unsigned char>, std::string>
+read_binary_file(const std::filesystem::path &path)
+{
+    std::ifstream in(path, std::ios::binary);
+    if (!in)
+        return std::unexpected(std::format("Failed to open filter file: {}", path.string()));
+    in.seekg(0, std::ios::end);
+    const auto file_size = static_cast<std::size_t>(in.tellg());
+    in.seekg(0);
+    std::vector<unsigned char> data(file_size);
+    if (file_size > 0 &&
+        !in.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(file_size)))
+        return std::unexpected(std::format("Failed to read filter file: {}", path.string()));
+    return data;
+}
+
+[[nodiscard]] bool looks_like_wltrie1(const std::span<const unsigned char> data) noexcept
+{
+    static constexpr unsigned char kMagic[8] = {'W', 'L', 'T', 'R', 'I', 'E', '1', 0};
+    return data.size() >= 8 && std::memcmp(data.data(), kMagic, 8) == 0;
+}
+
+[[nodiscard]] std::expected<std::unique_ptr<MembershipFilter>, std::string>
+open_membership_filter(const std::filesystem::path &path, const FilterEngine engine)
+{
+    std::ifstream peek(path, std::ios::binary);
+    if (!peek)
+        return std::unexpected(std::format("Failed to open filter file: {}", path.string()));
+
+    unsigned char magic[8]{};
+    peek.read(reinterpret_cast<char *>(magic), 8);
+    const auto got = static_cast<std::size_t>(peek.gcount());
+    peek.close();
+
+    const bool is_fst = got == 8 && looks_like_wltrie1(std::span<const unsigned char>(magic, 8));
+    const auto ext = path.extension().string();
+    const bool is_cdb = ext == ".cdb" || ext == ".CDB";
+
+    if (is_fst || is_cdb)
+    {
+        auto bytes = read_binary_file(path);
+        if (!bytes)
+            return std::unexpected(bytes.error());
+
+        if (is_fst)
+        {
+            const auto count = fst_key_count(*bytes);
+            if (!count)
+                return std::unexpected(count.error());
+            if (const auto probe = fst_contains_bytes(*bytes, ""); !probe)
+                return std::unexpected(probe.error());
+            return std::make_unique<FstMembershipFilter>(std::move(*bytes),
+                                                         static_cast<std::size_t>(*count));
+        }
+
+        if (const auto probe = cdb_contains_bytes(*bytes, ""); !probe)
+            return std::unexpected(probe.error());
+        // Key count unknown without a full scan; status line shows 0.
+        return std::make_unique<CdbMembershipFilter>(std::move(*bytes), 0);
+    }
+
+    const auto keys = load_filter_keys(path);
+    if (!keys)
+        return std::unexpected(keys.error());
+    return build_membership_filter(*keys, engine);
+}
+

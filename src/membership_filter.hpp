@@ -29,10 +29,15 @@ public:
     virtual ~MembershipFilter() = default;
     [[nodiscard]] virtual bool contains(std::string_view key) const = 0;
     [[nodiscard]] virtual std::size_t size() const noexcept = 0;
+    [[nodiscard]] virtual const char *backend_name() const noexcept = 0;
 };
 
 [[nodiscard]] std::expected<std::unique_ptr<MembershipFilter>, std::string>
 build_membership_filter(const std::vector<std::string> &keys, FilterEngine engine);
+
+/// Open B as membership index: WLTRIE1 magic → FST, `.cdb` → CDB, else text + engine.
+[[nodiscard]] std::expected<std::unique_ptr<MembershipFilter>, std::string>
+open_membership_filter(const std::filesystem::path &path, FilterEngine engine);
 
 [[nodiscard]] std::expected<std::vector<std::string>, std::string>
 load_filter_keys(const std::filesystem::path &path);

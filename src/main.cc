@@ -300,14 +300,7 @@ int main(const int argc, char *argv[])
         const std::filesystem::path filter_path = !args.options.exclude_path.empty()
                                                       ? args.options.exclude_path
                                                       : args.options.intersect_path;
-        const auto filter_keys = load_filter_keys(filter_path);
-        if (!filter_keys)
-        {
-            std::println(stderr, "Error: {}", filter_keys.error());
-            return 1;
-        }
-
-        auto filter = build_membership_filter(*filter_keys, *engine);
+        auto filter = open_membership_filter(filter_path, *engine);
         if (!filter)
         {
             std::println(stderr, "Error: {}", filter.error());
@@ -319,7 +312,7 @@ int main(const int argc, char *argv[])
         args.options.membership_exclude = !args.options.exclude_path.empty();
         std::println("Built {} filter via {} ({} keys); streaming inputs with early drop.",
                      args.options.membership_exclude ? "exclude" : "intersect",
-                     filter_engine_name(*engine), membership_filter->size());
+                     membership_filter->backend_name(), membership_filter->size());
     }
 
     const auto start_time = std::chrono::high_resolution_clock::now();

@@ -12,6 +12,7 @@
 #include <cstring>
 #include <format>
 #include <fstream>
+#include <span>
 #include <unordered_set>
 #include <vector>
 
@@ -160,22 +161,12 @@ struct RecordRef
     return {};
 }
 
-[[nodiscard]] std::expected<bool, std::string> cdb_contains(const std::filesystem::path &path,
-                                                            const std::string_view key)
+[[nodiscard]] std::expected<bool, std::string> cdb_contains_bytes(const std::span<const unsigned char> data,
+                                                                  const std::string_view key)
 {
-    std::ifstream in(path, std::ios::binary);
-    if (!in)
-        return std::unexpected(std::format("Failed to open CDB: {}", path.string()));
-
-    in.seekg(0, std::ios::end);
-    const auto file_size = static_cast<std::uint64_t>(in.tellg());
+    const auto file_size = static_cast<std::uint64_t>(data.size());
     if (file_size < kCdbHeaderSize)
         return std::unexpected("CDB file too small");
-    in.seekg(0);
-
-    std::vector<unsigned char> data(static_cast<std::size_t>(file_size));
-    if (!in.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(file_size)))
-        return std::unexpected("Failed to read CDB file");
 
     const std::uint32_t hash = cdb_hash(key);
     const std::uint32_t table_index = hash % 256;
@@ -209,4 +200,22 @@ struct RecordRef
         slot = (slot + 1) % nslots;
     }
     return false;
+}
+
+[[nodiscard]] std::expected<bool, std::string> cdb_contains(const std::filesystem::path &path,
+                                                            const std::string_view key)
+{
+    std::ifstream in(path, std::ios::binary);
+    if (!in)
+        return std::unexpected(std::format("Failed to open CDB: {}", path.string()));
+
+    in.seekg(0, std::ios::end);
+    const auto file_size = static_cast<std::size_t>(in.tellg());
+    in.seekg(0);
+
+    std::vector<unsigned char> data(file_size);
+    if (file_size > 0 &&
+        !in.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(file_size)))
+        return std::unexpected("Failed to read CDB file");
+    return cdb_contains_bytes(data, key);
 }

@@ -109,6 +109,16 @@ Build a membership index from FILE B **first**, then **stream** input files (A) 
 
 `--exclude` and `--intersect` are mutually exclusive. Input files are read as a line stream (no full-file buffer); peak RAM is dominated by B's filter plus surviving words from A.
 
+B may be a plain text wordlist **or** a previously exported index:
+- `WLTRIE1` (`.fst` from `--format=fst`) — detected by magic; `--filter-engine` ignored
+- `.cdb` (from `--format=cdb`) — detected by extension; `--filter-engine` ignored
+
+```bash
+./build/wordlist_sort --format=fst block.fst block.txt
+./build/wordlist_sort --exclude block.fst --sort --deduplicate out.txt big.txt
+```
+
+
 ## Output formats
 
 | `--format` | Description |
