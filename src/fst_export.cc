@@ -12,6 +12,7 @@
 #include <format>
 #include <fstream>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -153,23 +154,20 @@ void write_u32_le(std::ostream &out, const std::uint32_t value)
     return {};
 }
 
-[[nodiscard]] std::expected<bool, std::string> fst_contains(const std::filesystem::path &path,
-                                                            const std::string_view key)
+[[nodiscard]] std::expected<std::uint32_t, std::string> fst_key_count(const std::span<const unsigned char> data)
 {
-    std::ifstream in(path, std::ios::binary);
-    if (!in)
-        return std::unexpected(std::format("Failed to open FST/trie: {}", path.string()));
-
-    in.seekg(0, std::ios::end);
-    const auto file_size = static_cast<std::size_t>(in.tellg());
-    in.seekg(0);
-    if (file_size < 20)
+    if (data.size() < 12)
         return std::unexpected("FST/trie file too small");
+    if (std::memcmp(data.data(), kMagic, 8) != 0)
+        return std::unexpected("Not a WLTRIE1 FST/trie file");
+    return read_u32_le(data.data() + 8);
+}
 
-    std::vector<unsigned char> data(file_size);
-    if (!in.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(file_size)))
-        return std::unexpected("Failed to read FST/trie file");
-
+[[nodiscard]] std::expected<bool, std::string> fst_contains_bytes(const std::span<const unsigned char> data,
+                                                                  const std::string_view key)
+{
+    if (data.size() < 20)
+        return std::unexpected("FST/trie file too small");
     if (std::memcmp(data.data(), kMagic, 8) != 0)
         return std::unexpected("Not a WLTRIE1 FST/trie file");
 
@@ -177,7 +175,7 @@ void write_u32_le(std::ostream &out, const std::uint32_t value)
     const std::uint32_t edge_count = read_u32_le(data.data() + 16);
     const std::size_t nodes_off = 20;
     const std::size_t edges_off = nodes_off + static_cast<std::size_t>(node_count) * 8;
-    if (edges_off + static_cast<std::size_t>(edge_count) * 5 > file_size)
+    if (edges_off + static_cast<std::size_t>(edge_count) * 5 > data.size())
         return std::unexpected("FST/trie truncated");
 
     std::uint32_t node = 0;
@@ -211,4 +209,21 @@ void write_u32_le(std::ostream &out, const std::uint32_t value)
     const unsigned char *np = data.data() + nodes_off + static_cast<std::size_t>(node) * 8;
     const std::uint32_t packed = read_u32_le(np);
     return (packed & 1u) != 0;
+}
+
+[[nodiscard]] std::expected<bool, std::string> fst_contains(const std::filesystem::path &path,
+                                                            const std::string_view key)
+{
+    std::ifstream in(path, std::ios::binary);
+    if (!in)
+        return std::unexpected(std::format("Failed to open FST/trie: {}", path.string()));
+
+    in.seekg(0, std::ios::end);
+    const auto file_size = static_cast<std::size_t>(in.tellg());
+    in.seekg(0);
+    std::vector<unsigned char> data(file_size);
+    if (file_size > 0 &&
+        !in.read(reinterpret_cast<char *>(data.data()), static_cast<std::streamsize>(file_size)))
+        return std::unexpected("Failed to read FST/trie file");
+    return fst_contains_bytes(data, key);
 }

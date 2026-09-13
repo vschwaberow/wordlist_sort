@@ -6,9 +6,11 @@
 
 #pragma once
 
+#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <string>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -35,10 +37,21 @@ enum class ExportFormat
 [[nodiscard]] std::expected<void, std::string> write_fst(const std::vector<std::string> &words,
                                                          const std::filesystem::path &path);
 
+/// Exact-key probe against an already-loaded WLTRIE1 buffer.
+[[nodiscard]] std::expected<bool, std::string> fst_contains_bytes(std::span<const unsigned char> data,
+                                                                  std::string_view key);
+
 /// Exact-key probe for tests / tooling (mmap-free read of our WLTRIE1 files).
 [[nodiscard]] std::expected<bool, std::string> fst_contains(const std::filesystem::path &path,
                                                             std::string_view key);
 
+/// Exact-key probe against an already-loaded DJB CDB buffer.
+[[nodiscard]] std::expected<bool, std::string> cdb_contains_bytes(std::span<const unsigned char> data,
+                                                                  std::string_view key);
+
 /// Exact-key probe for DJB CDB files.
 [[nodiscard]] std::expected<bool, std::string> cdb_contains(const std::filesystem::path &path,
                                                             std::string_view key);
+
+/// Key count from WLTRIE1 header (unique keys), if buffer is a valid header prefix.
+[[nodiscard]] std::expected<std::uint32_t, std::string> fst_key_count(std::span<const unsigned char> data);

@@ -91,7 +91,7 @@ GPU transfers use **pinned host memory**. Before launching, the tool checks free
 
 ## Set filters (`--exclude` / `--intersect`)
 
-Build a membership index from FILE B, then keep/drop words from the processed inputs (A):
+Build a membership index from FILE B **first**, then **stream** input files (A) line-by-line and drop/keep words during ingest. Survivors stay in RAM for sort/dedup; filtered-out words are never stored.
 
 ```bash
 # A \ B  (remove words listed in blocklist.txt)
@@ -103,11 +103,21 @@ Build a membership index from FILE B, then keep/drop words from the processed in
 
 | Engine | Notes |
 |--------|-------|
-| `hash` | `unordered_set` (always available; highest RAM) |
+| `hash` | `unordered_set` (always available; highest RAM for B) |
 | `fst` | Builds a temporary WLTRIE1 trie from B |
-| `pthash` | Minimal perfect hash + key table (needs `-DWORDLIST_SORT_PTHASH=ON`, default ON). PTHash may enable host-specific ISA flags via its INTERFACE. |
+| `pthash` | Minimal perfect hash + key table (needs `-DWORDLIST_SORT_PTHASH=ON`, default ON). PTHash may enable host-specific ISA flags via its INTERFACE. Best RAM trade-off for large B. |
 
-`--exclude` and `--intersect` are mutually exclusive.
+`--exclude` and `--intersect` are mutually exclusive. Input files are read as a line stream (no full-file buffer); peak RAM is dominated by B's filter plus surviving words from A.
+
+B may be a plain text wordlist **or** a previously exported index:
+- `WLTRIE1` (`.fst` from `--format=fst`) — detected by magic; `--filter-engine` ignored
+- `.cdb` (from `--format=cdb`) — detected by extension; `--filter-engine` ignored
+
+```bash
+./build/wordlist_sort --format=fst block.fst block.txt
+./build/wordlist_sort --exclude block.fst --sort --deduplicate out.txt big.txt
+```
+
 
 ## Output formats
 

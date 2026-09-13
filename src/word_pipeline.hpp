@@ -15,6 +15,8 @@
 #include <string_view>
 #include <vector>
 
+class MembershipFilter;
+
 struct Options
 {
     int minlen = 0;
@@ -43,6 +45,8 @@ struct Options
     std::string exclude_path;
     std::string intersect_path;
     std::string filter_engine = "hash";
+    const MembershipFilter *membership = nullptr;
+    bool membership_exclude = true;
 };
 
 [[nodiscard]] constexpr bool is_digit_char(char c) noexcept;
