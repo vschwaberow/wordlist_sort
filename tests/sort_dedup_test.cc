@@ -190,3 +190,25 @@ TEST(SortDedup, ExternalSortChunkDedups)
     EXPECT_EQ(words, copy);
     EXPECT_FALSE(words.empty());
 }
+
+TEST(SortDedup, ExternalSortBuilderIngest)
+{
+    ExternalSortBuilder builder(make_sort_dedup_plan(true, true), 5);
+    for (int i = 0; i < 23; ++i)
+    {
+        builder.push("w" + std::to_string(i % 7));
+        builder.push("z" + std::to_string(i));
+    }
+    std::vector<std::string> out;
+    builder.finish(out);
+
+    std::vector<std::string> expected;
+    for (int i = 0; i < 23; ++i)
+    {
+        expected.push_back("w" + std::to_string(i % 7));
+        expected.push_back("z" + std::to_string(i));
+    }
+    sort_and_deduplicate_words(expected, SortDedupOptions{.sort = true, .deduplicate = true});
+    EXPECT_EQ(out, expected);
+    EXPECT_EQ(builder.pushed(), 46u);
+}

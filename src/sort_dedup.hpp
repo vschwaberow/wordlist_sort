@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstddef>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -69,5 +70,31 @@ void merge_sorted_word_runs(std::vector<std::vector<std::string>> runs,
 void sort_and_deduplicate_words_external(std::vector<std::string> &words,
                                          const SortDedupPlan &plan,
                                          std::size_t chunk_words);
+
+/// Incremental external sort: push words during ingest; flush runs at `chunk_words`; finish merges.
+class ExternalSortBuilder
+{
+public:
+    ExternalSortBuilder(SortDedupPlan plan, std::size_t chunk_words);
+
+    void push(std::string word);
+    /// Flush remaining buffer and k-way merge into `out`.
+    void finish(std::vector<std::string> &out);
+    [[nodiscard]] std::size_t pushed() const noexcept { return pushed_; }
+    [[nodiscard]] std::size_t run_count() const noexcept { return run_paths_.size(); }
+
+    ExternalSortBuilder(const ExternalSortBuilder &) = delete;
+    ExternalSortBuilder &operator=(const ExternalSortBuilder &) = delete;
+
+private:
+    void flush_unlocked();
+
+    SortDedupPlan plan_{};
+    std::size_t chunk_words_ = 0;
+    std::size_t pushed_ = 0;
+    std::mutex mutex_;
+    std::vector<std::string> buffer_;
+    std::vector<std::string> run_paths_;
+};
 
 void sort_and_deduplicate_words(std::vector<std::string> &words, const SortDedupOptions &options);

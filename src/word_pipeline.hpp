@@ -18,6 +18,7 @@
 #include <vector>
 
 class MembershipFilter;
+class ExternalSortBuilder;
 
 struct Options
 {
@@ -56,6 +57,7 @@ struct Options
     std::ostream *stream_out = nullptr;
     std::mutex *stream_mutex = nullptr;
     std::atomic<std::size_t> *stream_emitted = nullptr;
+    ExternalSortBuilder *external_sort = nullptr;
 };
 
 [[nodiscard]] constexpr bool is_digit_char(char c) noexcept;
