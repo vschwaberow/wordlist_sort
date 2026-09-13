@@ -45,6 +45,13 @@ namespace {
     return ext.size() == 3 && ext[0] == '.' && eq_ci(ext[1], 'x') && eq_ci(ext[2], 'z');
 }
 
+[[nodiscard]] bool path_looks_lz4(const std::filesystem::path &path) noexcept
+{
+    const auto ext = path.extension().string();
+    return ext.size() == 4 && ext[0] == '.' && eq_ci(ext[1], 'l') && eq_ci(ext[2], 'z') &&
+           eq_ci(ext[3], '4');
+}
+
 #if defined(WORDLIST_SORT_ZLIB)
 
 #include <zlib.h>
@@ -329,6 +336,130 @@ bool XzInputStream::is_open() const noexcept
 
 #endif
 
+#if defined(WORDLIST_SORT_LZ4)
+
+#include <lz4frame.h>
+
+class Lz4InputStream::Buf final : public std::streambuf
+{
+  public:
+    explicit Buf(const std::filesystem::path &path)
+        : file_(std::fopen(path.string().c_str(), "rb")),
+          in_storage_(1 << 16),
+          out_storage_(1 << 16)
+    {
+        if (file_ == nullptr)
+            return;
+        if (LZ4F_isError(LZ4F_createDecompressionContext(&dctx_, LZ4F_VERSION)))
+        {
+            dctx_ = nullptr;
+            close_all();
+            return;
+        }
+        setg(out_storage_.data(), out_storage_.data(), out_storage_.data());
+        ok_ = true;
+    }
+
+    ~Buf() override { close_all(); }
+
+    [[nodiscard]] bool ok() const noexcept { return ok_; }
+
+  protected:
+    int_type underflow() override
+    {
+        if (!ok_ || dctx_ == nullptr)
+            return traits_type::eof();
+        if (gptr() < egptr())
+            return traits_type::to_int_type(*gptr());
+
+        while (true)
+        {
+            if (in_pos_ >= in_size_ && !input_eof_)
+            {
+                in_size_ = std::fread(in_storage_.data(), 1, in_storage_.size(), file_);
+                in_pos_ = 0;
+                if (in_size_ == 0)
+                    input_eof_ = true;
+            }
+
+            std::size_t dst_size = out_storage_.size();
+            std::size_t src_size = in_size_ - in_pos_;
+            const std::size_t src_before = src_size;
+            const std::size_t ret = LZ4F_decompress(
+                dctx_, out_storage_.data(), &dst_size, in_storage_.data() + in_pos_, &src_size, nullptr);
+            in_pos_ += src_size;
+
+            if (LZ4F_isError(ret))
+                return traits_type::eof();
+
+            if (dst_size > 0)
+            {
+                setg(out_storage_.data(), out_storage_.data(),
+                     out_storage_.data() + static_cast<std::ptrdiff_t>(dst_size));
+                return traits_type::to_int_type(*gptr());
+            }
+
+            // Frame complete.
+            if (ret == 0)
+                return traits_type::eof();
+
+            // Consumed input but no output yet (e.g. header) — keep going.
+            if (src_size > 0)
+                continue;
+
+            // Need more input.
+            if (!input_eof_)
+                continue;
+
+            // EOF with no progress — stop (avoid spin).
+            if (src_before == 0)
+                return traits_type::eof();
+        }
+    }
+
+  private:
+    void close_all()
+    {
+        if (dctx_ != nullptr)
+        {
+            LZ4F_freeDecompressionContext(dctx_);
+            dctx_ = nullptr;
+        }
+        if (file_ != nullptr)
+        {
+            std::fclose(file_);
+            file_ = nullptr;
+        }
+        ok_ = false;
+    }
+
+    FILE *file_ = nullptr;
+    LZ4F_dctx *dctx_ = nullptr;
+    std::vector<char> in_storage_;
+    std::vector<char> out_storage_;
+    std::size_t in_size_ = 0;
+    std::size_t in_pos_ = 0;
+    bool input_eof_ = false;
+    bool ok_ = false;
+};
+
+Lz4InputStream::Lz4InputStream(const std::filesystem::path &path)
+    : std::istream(nullptr), buf_(std::make_unique<Buf>(path))
+{
+    rdbuf(buf_.get());
+    if (!buf_->ok())
+        setstate(std::ios::failbit);
+}
+
+Lz4InputStream::~Lz4InputStream() = default;
+
+bool Lz4InputStream::is_open() const noexcept
+{
+    return buf_ && buf_->ok();
+}
+
+#endif
+
 namespace {
 
 enum class CompressionKind
@@ -337,6 +468,7 @@ enum class CompressionKind
     Gzip,
     Zstd,
     Xz,
+    Lz4,
 };
 
 [[nodiscard]] CompressionKind detect_compression(const std::filesystem::path &path)
@@ -344,6 +476,7 @@ enum class CompressionKind
     const bool ext_gz = path_looks_gzip(path);
     const bool ext_zst = path_looks_zstd(path);
     const bool ext_xz = path_looks_xz(path);
+    const bool ext_lz4 = path_looks_lz4(path);
 
     std::ifstream probe(path, std::ios::binary);
     if (!probe)
@@ -359,6 +492,9 @@ enum class CompressionKind
         n >= 4 && magic[0] == 0x28 && magic[1] == 0xb5 && magic[2] == 0x2f && magic[3] == 0xfd;
     const bool magic_xz = n >= 6 && magic[0] == 0xfd && magic[1] == 0x37 && magic[2] == 0x7a &&
                           magic[3] == 0x58 && magic[4] == 0x5a && magic[5] == 0x00;
+    // LZ4 frame magic 0x184D2204 (little-endian on disk).
+    const bool magic_lz4 =
+        n >= 4 && magic[0] == 0x04 && magic[1] == 0x22 && magic[2] == 0x4d && magic[3] == 0x18;
 
     if (ext_gz || magic_gzip)
         return CompressionKind::Gzip;
@@ -366,6 +502,8 @@ enum class CompressionKind
         return CompressionKind::Zstd;
     if (ext_xz || magic_xz)
         return CompressionKind::Xz;
+    if (ext_lz4 || magic_lz4)
+        return CompressionKind::Lz4;
     return CompressionKind::None;
 }
 
@@ -437,6 +575,24 @@ enum class CompressionKind
 #else
         if (error_out)
             *error_out = "xz input requires a build with liblzma (WORDLIST_SORT_LZMA)";
+        return nullptr;
+#endif
+    }
+
+    if (kind == CompressionKind::Lz4)
+    {
+#if defined(WORDLIST_SORT_LZ4)
+        auto lz = std::make_unique<Lz4InputStream>(path);
+        if (!lz->is_open())
+        {
+            if (error_out)
+                *error_out = "Unable to open lz4 file: " + path.string();
+            return nullptr;
+        }
+        return lz;
+#else
+        if (error_out)
+            *error_out = "lz4 input requires a build with liblz4 (WORDLIST_SORT_LZ4)";
         return nullptr;
 #endif
     }
