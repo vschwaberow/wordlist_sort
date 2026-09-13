@@ -107,6 +107,7 @@ These are behaviors not clearly documented and easy to get wrong:
 - **`--noutf8`** strips bytes `>127` on every input line (independent of `--dewebify`).
 - **`--upper`**: uppercase each survivor; if both `--lower` and `--upper` are set, `--upper` wins.
 - **`--reverse`**: reverse character order within each survivor (after case transforms).
+- **`--prefix` / `--suffix`**: keep survivors that start/end with the given string (after transforms; empty = off).
 - **`-0` / `--null`**: NUL-separated text I/O for ingest and `--format=text` output (external-sort merge included). Rejected for binary formats. Internal spill runs stay newline-based.
 - **`--append`**: text-only; open output with `app` instead of `trunc`. Existing files do not require `--force`. Rejected for `cdb`/`fst`/`pthash`.
 - **`--skip-comments`**: drop lines whose first non-space/tab character is `#` (before other line transforms).

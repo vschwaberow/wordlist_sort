@@ -181,6 +181,11 @@ void trim_special_inplace(std::string &str) noexcept
         return std::format("{} {}", username, domain);
     }
 
+    if (!options.prefix.empty() && !processed.starts_with(options.prefix))
+        return std::nullopt;
+    if (!options.suffix.empty() && !processed.ends_with(options.suffix))
+        return std::nullopt;
+
     if (processed.empty())
         return std::nullopt;
     return processed;

@@ -66,6 +66,8 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--sort-chunk <int>` | External CPU sort/dedup: max words per temp run (`0` = off; spills when the list is larger) |
 | `--limit <int>` | Stop ingest after N accepted survivors (`0` = unlimited; applies before sort/dedup) |
 | `--tmp-dir <path>` | Directory for external-sort / filter temp files (default: system temp; created if missing) |
+| `--prefix <str>` | Keep only words that start with PREFIX |
+| `--suffix <str>` | Keep only words that end with SUFFIX |
 | `--format <str>` | Output format: `text` (default), `cdb`, `fst` (WLTRIE1), `pthash` (WLPTH1) |
 | `-o`, `--output <file>` | Output path or `-` for stdout (alternative to positional `<output>`; then all positionals are inputs) |
 | `--exclude <file>` | Drop words that occur in FILE (set difference A\\B) |
