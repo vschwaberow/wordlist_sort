@@ -47,7 +47,7 @@ By default the first positional is the **output** file, followed by one or more 
 
 Use `-` as an input to read stdin (at most once) and `-` as output (`-o -` or positional) to write text to stdout. Binary formats (`cdb`/`fst`/`pthash`) cannot target stdout. Writing to stdout implies quiet mode so banners do not corrupt the pipe.
 
-Input paths ending in `.gz` (or starting with gzip magic `1f 8b`) are decompressed on the fly when built with zlib (`WORDLIST_SORT_ZLIB`, default ON). The same applies to text files used with `--exclude` / `--intersect`. Stdin is always raw (uncompressed).
+Input paths ending in `.gz` / `.zst` (or matching gzip/zstd magic) are decompressed on the fly when built with zlib / libzstd (`WORDLIST_SORT_ZLIB` / `WORDLIST_SORT_ZSTD`, both default ON). The same applies to text files used with `--exclude` / `--intersect`. Stdin is always raw (uncompressed).
 
 Integer options accept `--opt value` or `--opt=value` (values must be non-negative). Options, flags, and positionals can appear in any order. `--` ends option parsing.
 

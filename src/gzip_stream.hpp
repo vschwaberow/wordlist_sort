@@ -12,6 +12,7 @@
 #include <string>
 
 [[nodiscard]] bool path_looks_gzip(const std::filesystem::path &path) noexcept;
+[[nodiscard]] bool path_looks_zstd(const std::filesystem::path &path) noexcept;
 
 #if defined(WORDLIST_SORT_ZLIB)
 
@@ -34,7 +35,28 @@ class GzipInputStream final : public std::istream
 
 #endif
 
+#if defined(WORDLIST_SORT_ZSTD)
+
+/// Decompressing input stream over a zstd file (`ZSTD_DStream`).
+class ZstdInputStream final : public std::istream
+{
+  public:
+    explicit ZstdInputStream(const std::filesystem::path &path);
+    ~ZstdInputStream() override;
+
+    ZstdInputStream(const ZstdInputStream &) = delete;
+    ZstdInputStream &operator=(const ZstdInputStream &) = delete;
+
+    [[nodiscard]] bool is_open() const noexcept;
+
+  private:
+    class Buf;
+    std::unique_ptr<Buf> buf_;
+};
+
+#endif
+
 /// Open a path as a line-oriented input stream. Owns the stream.
-/// When zlib is enabled, `*.gz` (and gzip magic) uses GzipInputStream.
+/// Optional transparent inflate for gzip / zstd (extension or magic).
 [[nodiscard]] std::unique_ptr<std::istream> open_input_stream(const std::filesystem::path &path,
                                                               std::string *error_out);
