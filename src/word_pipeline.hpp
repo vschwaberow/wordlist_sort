@@ -11,6 +11,7 @@
 #include <expected>
 #include <filesystem>
 #include <optional>
+#include <regex>
 #include <string>
 #include <string_view>
 #include <mutex>
@@ -61,6 +62,8 @@ struct Options
     std::string tmp_dir;
     std::string prefix;
     std::string suffix;
+    std::string regex_pattern;
+    const std::regex *regex = nullptr;
     std::string format = "text";
     std::string exclude_path;
     std::string intersect_path;
