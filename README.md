@@ -57,6 +57,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--minlen <int>` | Filter out words shorter than N chars |
 | `--dup-sense <int>` | Remove word if any single char exceeds N% (0–100) |
 | `--cuda-threshold <int>` | Minimum word count before GPU sort/dedup (default: 10000000; `0` = auto ≈100k; requires `--cuda`) |
+| `--format <str>` | Output format: `text` (default), `cdb` (DJB Constant Database), `fst` (compact trie / WLTRIE1) |
 
 ### Flags
 
@@ -82,6 +83,20 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 Without a CUDA build, `--cuda` prints a note and uses the CPU path. If a CUDA run fails at runtime, the tool falls back to CPU with a warning.
 
 GPU transfers use **pinned host memory**. Before launching, the tool checks free VRAM against a conservative working-set estimate. If the full list does not fit, it switches to a **chunked out-of-core** GPU path (sort each VRAM-sized chunk, then k-way merge on the host). `--cuda-threshold 0` selects an auto minimum (~100k words) instead of the 10M default.
+
+
+## Output formats
+
+| `--format` | Description |
+|------------|-------------|
+| `text` (default) | One word per line (existing behavior) |
+| `cdb` | DJB **Constant Database** (tinycdb-compatible). Each word is a key with an empty value. Classic CDB 4 GiB limit. Duplicate keys: first wins. |
+| `fst` | Compact **prefix trie** on disk (`WLTRIE1`). Exact membership lookups; shared prefixes. Duplicate keys: first wins. |
+
+```bash
+./build/wordlist_sort --sort --deduplicate --format=cdb words.cdb list.txt
+./build/wordlist_sort --sort --deduplicate --format=fst words.fst list.txt
+```
 
 ## Example
 

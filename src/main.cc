@@ -4,6 +4,7 @@
 // Author: Volker Schwaberow <volker@schwaberow.de>
 // Copyright (c) 2026 Volker Schwaberow
 
+#include "export_format.hpp"
 #include "sort_dedup.hpp"
 #include "word_pipeline.hpp"
 
@@ -50,6 +51,13 @@ struct IntOptSpec
     std::string_view help;
 };
 
+struct StrOptSpec
+{
+    std::string_view name;
+    std::string Options::*target;
+    std::string_view help;
+};
+
 constexpr std::array flag_specs{
     FlagSpec{"--digit-trim",   &Options::digit_trim,   "Trim all digits from beginning and end of words"},
     FlagSpec{"--special-trim", &Options::special_trim, "Trim non-alphanumeric chars from beginning and end of words"},
@@ -77,11 +85,17 @@ constexpr std::array int_opt_specs{
     IntOptSpec{"--cuda-threshold", &Options::cuda_threshold, "Min words for GPU sort/dedup (0=auto heuristic ~100k; requires --cuda)"},
 };
 
+constexpr std::array str_opt_specs{
+    StrOptSpec{"--format", &Options::format, "Output format: text (default), cdb (DJB Constant Database), fst (compact trie)"},
+};
+
 constexpr std::size_t compute_help_col_width()
 {
     std::size_t w = 0;
     for (const auto &s : int_opt_specs)
         w = std::max(w, s.name.size() + std::size_t{6});
+    for (const auto &s : str_opt_specs)
+        w = std::max(w, s.name.size() + std::size_t{8});
     for (const auto &s : flag_specs)
         w = std::max(w, s.name.size());
     w = std::max(w, std::size_t{10});
@@ -121,6 +135,8 @@ void print_usage()
     std::println("Options:");
     for (const auto &s : int_opt_specs)
         std::println("  {:{}}  {}", std::format("{} <int>", s.name), help_col_width, s.help);
+    for (const auto &s : str_opt_specs)
+        std::println("  {:{}}  {}", std::format("{} <str>", s.name), help_col_width, s.help);
     std::println();
     std::println("Flags:");
     for (const auto &s : flag_specs)
@@ -209,6 +225,18 @@ using ParseResult = std::expected<std::optional<ParsedArgs>, std::string>;
             continue;
         }
 
+        if (auto it = std::ranges::find(str_opt_specs, name, &StrOptSpec::name); it != str_opt_specs.end())
+        {
+            if (!has_inline_value)
+            {
+                if (i + 1 >= args.size())
+                    return std::unexpected(std::format("Option {} requires a value", name));
+                inline_value = std::string_view{args[++i]};
+            }
+            result.options.*(it->target) = std::string{inline_value};
+            continue;
+        }
+
         if (arg.starts_with("--"))
             return std::unexpected(std::format("Unknown option: {}", name));
 
@@ -262,7 +290,14 @@ int main(const int argc, char *argv[])
                                            .cuda_threshold = static_cast<std::size_t>(args.options.cuda_threshold),
                                        });
 
-    if (const auto write_result = write_lines(words, args.output_path); !write_result)
+    const auto format = parse_export_format(args.options.format);
+    if (!format)
+    {
+        std::println(stderr, "Error: {}", format.error());
+        return 1;
+    }
+
+    if (const auto write_result = write_export(words, args.output_path, *format); !write_result)
     {
         std::println(stderr, "Error: {}", write_result.error());
         return 1;

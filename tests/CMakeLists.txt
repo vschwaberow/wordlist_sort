@@ -59,3 +59,10 @@ if(WORDLIST_SORT_CUDA)
     add_test(NAME build_and_test_cuda COMMAND ${CMAKE_SOURCE_DIR}/build_and_test_cuda.sh)
     set_tests_properties(build_and_test_cuda PROPERTIES LABELS "integration;cuda")
 endif()
+
+wordlist_sort_add_cxx_test(export_format_test
+    export_format_test.cc
+    ${CMAKE_SOURCE_DIR}/src/export_format.cc
+    ${CMAKE_SOURCE_DIR}/src/cdb_export.cc
+    ${CMAKE_SOURCE_DIR}/src/fst_export.cc
+    ${WORDLIST_SORT_PIPELINE})

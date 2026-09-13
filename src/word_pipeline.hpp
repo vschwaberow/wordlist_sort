@@ -39,6 +39,7 @@ struct Options
     bool no_cuda = false;
     bool cuda_timing = false;
     int cuda_threshold = 10'000'000;
+    std::string format = "text";
 };
 
 [[nodiscard]] constexpr bool is_digit_char(char c) noexcept;
