@@ -81,6 +81,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--dup-remove` | Collapse consecutive duplicate characters within words |
 | `--lower` | Convert to lowercase |
 | `--upper` | Convert to uppercase (wins over `--lower` if both set) |
+| `--reverse` | Reverse characters within each word |
 | `--wordify` | Split lines into whitespace-separated words |
 | `--no-numbers` | Discard all-numeric words |
 | `--detab` | Remove leading tabs/spaces |

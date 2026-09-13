@@ -33,6 +33,7 @@ struct Options
     bool dup_remove = false;
     bool lower = false;
     bool upper = false;
+    bool reverse = false;
     bool no_numbers = false;
     bool hash_remove = false;
     bool email_sort = false;

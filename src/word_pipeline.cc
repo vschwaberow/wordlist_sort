@@ -132,6 +132,8 @@ void trim_special_inplace(std::string &str) noexcept
         std::ranges::transform(processed, processed.begin(), to_lower_char);
     if (options.upper)
         std::ranges::transform(processed, processed.begin(), to_upper_char);
+    if (options.reverse)
+        std::ranges::reverse(processed);
 
     if (options.digit_trim)
         trim_digits_inplace(processed);

@@ -73,6 +73,7 @@ constexpr std::array flag_specs{
     FlagSpec{"--dup-remove",   &Options::dup_remove,   "Remove consecutive duplicate characters within words"},
     FlagSpec{"--lower",        &Options::lower,        "Change word to all lower case"},
     FlagSpec{"--upper",        &Options::upper,        "Change word to all upper case (wins over --lower if both set)"},
+    FlagSpec{"--reverse",      &Options::reverse,      "Reverse characters within each word"},
     FlagSpec{"--wordify",      &Options::wordify,      "Convert all input lines/sentences into separate words based on whitespace"},
     FlagSpec{"--no-numbers",   &Options::no_numbers,   "Ignore/delete words that are composed entirely of digits"},
     FlagSpec{"--detab",        &Options::detab,        "Remove leading tabs or spaces from words/lines"},
