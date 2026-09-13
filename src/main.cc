@@ -88,6 +88,7 @@ constexpr std::array int_opt_specs{
     IntOptSpec{"--dup-sense",      &Options::dup_sense,      "Remove word if any single char is more than <N>% of the word (0-100)"},
     IntOptSpec{"--cuda-threshold", &Options::cuda_threshold, "Min words for GPU sort/dedup (0=auto heuristic ~100k; requires --cuda)"},
     IntOptSpec{"--jobs", &Options::jobs, "Parallel input workers (omit=auto CPU count, 0=unlimited, >0=cap)"},
+    IntOptSpec{"--sort-chunk", &Options::sort_chunk, "External CPU sort/dedup: words per temp run (0=off; spills when larger)"},
 };
 
 constexpr std::array str_opt_specs{
@@ -366,6 +367,7 @@ int main(const int argc, char *argv[])
                                                .no_cuda = args.options.no_cuda,
                                                .cuda_timing = args.options.cuda_timing,
                                                .cuda_threshold = static_cast<std::size_t>(args.options.cuda_threshold),
+                                               .sort_chunk = static_cast<std::size_t>(args.options.sort_chunk),
                                            });
 
         if (const auto write_result = write_export(words, args.output_path, *format); !write_result)

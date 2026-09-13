@@ -22,6 +22,8 @@ struct SortDedupOptions
     bool no_cuda = false;
     bool cuda_timing = false;
     std::size_t cuda_threshold = kCudaDefaultThreshold; // 0 = auto heuristic
+    /// When >0 and word count exceeds this, spill sorted runs to temp files and k-way merge.
+    std::size_t sort_chunk = 0;
 };
 
 struct SortDedupPlan
@@ -62,5 +64,10 @@ void sort_and_deduplicate_words_cpu(std::vector<std::string> &words, const SortD
 void merge_sorted_word_runs(std::vector<std::vector<std::string>> runs,
                             bool deduplicate,
                             std::vector<std::string> &out);
+
+/// File-backed external sort/dedup: chunk → temp runs → k-way merge into `words`.
+void sort_and_deduplicate_words_external(std::vector<std::string> &words,
+                                         const SortDedupPlan &plan,
+                                         std::size_t chunk_words);
 
 void sort_and_deduplicate_words(std::vector<std::string> &words, const SortDedupOptions &options);
