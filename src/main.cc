@@ -75,7 +75,7 @@ constexpr std::array flag_specs{
     FlagSpec{"--dewebify",     &Options::dewebify,     "Extract text from HTML input (strips tags)"},
     FlagSpec{"--noutf8",       &Options::noutf8,       "Keep only ASCII characters (0-127) on each input line"},
     FlagSpec{"--sort",         &Options::sort,         "Sort the output words lexicographically"},
-    FlagSpec{"--deduplicate",  &Options::deduplicate,  "Remove duplicate words from the final output list"},
+    FlagSpec{"--deduplicate",  &Options::deduplicate,  "Remove duplicate words (implies --sort)"},
     FlagSpec{"--cuda",         &Options::cuda,         "Use GPU for sort/dedup when built with CUDA and word count exceeds threshold"},
     FlagSpec{"--no-cuda",      &Options::no_cuda,      "Force CPU sort/dedup even when CUDA is available"},
     FlagSpec{"--cuda-timing",  &Options::cuda_timing,  "Print CUDA phase timings (H2D/sort/dedup/D2H) to stderr"},
@@ -291,6 +291,12 @@ int main(const int argc, char *argv[])
         return 0;
 
     auto &args = **parse_result;
+
+    if (args.options.deduplicate && !args.options.sort)
+    {
+        std::println(stderr, "Note: --deduplicate implies --sort (global dedup requires a sorted pass).");
+        args.options.sort = true;
+    }
 
     std::println("{} version {} by {} ({} {} {})", PROGRAM_NAME, PROGRAM_VERSION, PROGRAM_AUTHOR, BUILD_DATE,
                  BUILD_TIME, BUILD_PLATFORM);

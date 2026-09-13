@@ -113,3 +113,18 @@ TEST(E2eCli, OutputFlagTreatsPositionalsAsInputs)
     EXPECT_EQ(result.exit_code, 0);
     EXPECT_EQ(test_helpers::read_text_file(output), "a\nz\n");
 }
+
+TEST(E2eCli, DeduplicateImpliesSort)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "b\na\nb\n");
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " --deduplicate " + shell_quote(output.string()) + " " +
+                                                shell_quote(input.string()));
+    EXPECT_EQ(result.exit_code, 0);
+    EXPECT_EQ(test_helpers::read_text_file(output), "a\nb\n");
+    EXPECT_NE(result.stderr_text.find("implies --sort"), std::string::npos);
+}
