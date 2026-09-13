@@ -6,16 +6,45 @@
 
 #pragma once
 
+#include <cctype>
 #include <cstddef>
 #include <mutex>
 #include <filesystem>
 #include <ostream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 inline constexpr std::size_t kCudaThresholdAuto = 0;
 inline constexpr std::size_t kCudaHeuristicMinWords = 100'000;
 inline constexpr std::size_t kCudaDefaultThreshold = 10'000'000;
+
+[[nodiscard]] inline int compare_ignore_case(const std::string_view a, const std::string_view b) noexcept
+{
+    const std::size_t n = a.size() < b.size() ? a.size() : b.size();
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        const auto ca = static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(a[i])));
+        const auto cb = static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(b[i])));
+        if (ca != cb)
+            return ca < cb ? -1 : 1;
+    }
+    if (a.size() < b.size())
+        return -1;
+    if (a.size() > b.size())
+        return 1;
+    return 0;
+}
+
+[[nodiscard]] inline bool less_ignore_case(const std::string_view a, const std::string_view b) noexcept
+{
+    return compare_ignore_case(a, b) < 0;
+}
+
+[[nodiscard]] inline bool equal_ignore_case(const std::string_view a, const std::string_view b) noexcept
+{
+    return compare_ignore_case(a, b) == 0;
+}
 
 struct SortDedupOptions
 {
@@ -28,6 +57,7 @@ struct SortDedupOptions
     /// When >0 and word count exceeds this, spill sorted runs to temp files and k-way merge.
     std::size_t sort_chunk = 0;
     bool quiet = false;
+    bool ignore_case = false;
     std::filesystem::path tmp_dir; // empty = system temp
 };
 
@@ -36,9 +66,11 @@ struct SortDedupPlan
     bool perform_sort = false;
     bool perform_deduplicate = false;
     bool announce_implicit_sort = false;
+    bool ignore_case = false;
 };
 
-[[nodiscard]] SortDedupPlan make_sort_dedup_plan(const bool sort, const bool deduplicate) noexcept;
+[[nodiscard]] SortDedupPlan make_sort_dedup_plan(bool sort, bool deduplicate,
+                                                bool ignore_case = false) noexcept;
 
 void announce_implicit_sort_if_needed(const SortDedupPlan &plan);
 
