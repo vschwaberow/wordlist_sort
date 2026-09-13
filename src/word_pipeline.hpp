@@ -61,6 +61,7 @@ struct Options
     bool stats = false;
     bool check_sorted = false;
     bool ignore_case = false;
+    bool recursive = false;
     bool force = false;
     bool skip_comments = false;
     bool append = false;
