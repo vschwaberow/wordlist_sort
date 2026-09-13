@@ -64,13 +64,13 @@ Use median timings across sizes to calibrate `--cuda-threshold` (default 10_000_
 
 ## Critical Gotchas (README vs. Reality)
 
-The README is partially out of date / inaccurate. Trust the code, not the README, when they disagree.
+If README and code disagree, trust the code, then update the README in the same change.
 
 ### 1. The built binary is `word_sorter`, not `wordlist_sort`
 The README's examples (`./wordlist_sort ...`) will fail. `CMakeLists.txt` declares `add_executable(word_sorter ...)`. The internal version banner still prints `wordlist_sort` (from the `PROJECT_NAME` macro), which adds to the confusion. The on-disk executable is always `word_sorter`.
 
 ### 2. This is C++26, not C++17
-`CMakeLists.txt` sets `CMAKE_CXX_STANDARD 26` with `STANDARD_REQUIRED ON` and `cmake_minimum_required(VERSION 3.15)`. The code uses C++20/23 features: `std::views::split`, `std::ranges::sort`, structured bindings, `[[nodiscard]]`, `std::make_move_iterator`. README's "C++17" / "CMake 3.12" claims are wrong. You need a C++23-capable compiler (recent GCC/Clang/MSVC).
+`CMakeLists.txt` sets `CMAKE_CXX_STANDARD 26` with `STANDARD_REQUIRED ON` and `cmake_minimum_required(VERSION 3.18)`. The code uses C++20/23 features: `std::views::split`, `std::ranges::sort`, structured bindings, `[[nodiscard]]`, `std::make_move_iterator`. You need a C++23-capable compiler (recent GCC/Clang/MSVC).
 
 ### 3. There is NO memory-mapped I/O
 README claims "memory-mapped file I/O". The code does **not** use `mmap` or any mapped-file mechanism. `FileBuffer` reads the entire file into a `std::vector<char>` via `std::ifstream` (binary mode, size from `tellg`). Large files are fully loaded into RAM.
@@ -168,5 +168,6 @@ After this, clangd resolves the CLI11 include (from `build/_deps/cli11-src/`), t
 
 - Building/testing: `cmake -B build -DWORDLIST_SORT_BUILD_TESTS=ON && cmake --build build -j && ctest --test-dir build --output-on-failure -LE integration`
 - Before editing `src/main.cc`, ensure `compile_commands.json` exists so diagnostics are trustworthy.
-- When changing CLI flags, update **both** the CLI11 registration in `main()` and (if user-facing) the README — but remember the README currently lags the code, so verify against the actual implementation.
-- Do not introduce memory-mapped I/O, `unordered_set`, or a C++17 baseline "to match the README" — the README is wrong; the code is the source of truth.
+- When changing CLI flags or build options, update the parser/`CMakeLists.txt` **and** `README.md` in the same change. Trust the code if they disagree, then fix the README.
+- **README sync (mandatory):** Any user-facing or functional change (CLI flags, build options, defaults, new binaries/harnesses) must update `README.md` in the same commit/PR. Do not leave README catch-up for later.
+- Do not introduce memory-mapped I/O, `unordered_set`, or a C++17 baseline — the code is the source of truth; keep README aligned with it.

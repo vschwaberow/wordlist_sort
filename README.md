@@ -5,18 +5,28 @@ A C++26 CLI tool to process, filter, and sort wordlists. Processes multiple inpu
 ## Requirements
 
 - **C++26** compiler (GCC 16+, Clang, or MSVC)
-- CMake 3.15+
+- CMake 3.18+
+- Optional: NVIDIA CUDA Toolkit (only for `-DWORDLIST_SORT_CUDA=ON`)
 
 ## Building
 
 ```bash
-git clone https://github.com/username/wordlist_sort.git
+git clone https://github.com/vschwaberow/wordlist_sort.git
 cd wordlist_sort
 cmake -B build
 cmake --build build -j
 ```
 
-The binary is `build/word_sorter`. No external dependencies.
+The binary is `build/word_sorter`. The default build needs no external dependencies and no CUDA toolkit.
+
+### Optional CUDA build
+
+GPU acceleration applies only to `--sort` / `--deduplicate` (not to the filter pipeline):
+
+```bash
+cmake -B build-cuda -DWORDLIST_SORT_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=native
+cmake --build build-cuda -j
+```
 
 ## Usage
 
@@ -38,6 +48,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--maxtrim <int>` | Truncate words to N chars |
 | `--minlen <int>` | Filter out words shorter than N chars |
 | `--dup-sense <int>` | Remove word if any single char exceeds N% (0–100) |
+| `--cuda-threshold <int>` | Minimum word count before GPU sort/dedup (default: 10000000; requires `--cuda`) |
 
 ### Flags
 
@@ -56,6 +67,10 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--noutf8` | Keep only ASCII (0–127); effective only with `--dewebify` |
 | `--sort` | Sort output lexicographically |
 | `--deduplicate` | Remove duplicate words (forces sort if not already set) |
+| `--cuda` | Prefer GPU sort/dedup when built with CUDA and word count ≥ `--cuda-threshold` |
+| `--no-cuda` | Force CPU sort/dedup even when CUDA is available |
+
+Without a CUDA build, `--cuda` prints a note and uses the CPU path. If a CUDA run fails at runtime, the tool falls back to CPU with a warning.
 
 ## Example
 
@@ -63,16 +78,55 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 ./build/word_sorter --maxlen 10 --sort --detab sorted.txt list1.txt list2.txt list3.txt
 ```
 
-Filters words over 10 chars, removes leading tabs/spaces, sorts unique words, writes to `sorted.txt`.
+Filters words over 10 chars, removes leading tabs/spaces, sorts, writes to `sorted.txt`.
+
+CUDA example (CUDA build required):
+
+```bash
+./build-cuda/word_sorter --sort --deduplicate --cuda --cuda-threshold 1000000 out.txt big1.txt big2.txt
+```
 
 ## Performance
 
 - **Parallel:** each input file processed in its own `std::async` task
-- **Bulk I/O:** files read into memory in a single operation
+- **Bulk I/O:** files read fully into memory (no `mmap`)
+- **Dedup:** `sort` + `unique` (not a hash set)
 - **Ranges:** lazy transforms via `std::ranges`
 - **Move semantics:** per-task results moved into output without copying
+- **CUDA (optional):** sort/dedup on GPU above `--cuda-threshold`; calibrate with the benchmark harness
 
 The tool prints word counts and elapsed time on completion.
+
+## Benchmarks
+
+CPU baseline harness for sort, isolated unique/erase, and sort+dedup totals (`WORDLIST_SORT_BUILD_BENCHMARKS=ON`, default ON):
+
+```bash
+cmake -B build -DWORDLIST_SORT_BUILD_BENCHMARKS=ON
+cmake --build build -j --target sort_dedup_bench
+./build/benchmarks/sort_dedup_bench --sizes 100000,1000000,10000000 --iters 3
+# or
+./run_benchmark.sh --sizes 1000000 --csv
+```
+
+Optional CUDA comparison: build with `-DWORDLIST_SORT_CUDA=ON`, then pass `--cuda` to the harness (or `WORDLIST_SORT_CUDA=ON ./run_benchmark.sh --cuda`).
+
+## Testing
+
+GoogleTest + CTest (`WORDLIST_SORT_BUILD_TESTS=ON`, default ON):
+
+```bash
+cmake -B build -DWORDLIST_SORT_BUILD_TESTS=ON
+cmake --build build -j
+ctest --test-dir build --output-on-failure -LE integration
+```
+
+CUDA builds add `sort_dedup_cuda_test` (label `cuda`). Convenience wrappers:
+
+```bash
+./build_and_test.sh
+./build_and_test_cuda.sh
+```
 
 ## License
 
@@ -84,22 +138,4 @@ Volker Schwaberow <volker@schwaberow.de>
 
 ## Contributing
 
-Contributions via fork, branch, and Pull Request.
-
-## Testing
-
-GoogleTest + CTest (requires `-DWORDLIST_SORT_BUILD_TESTS=ON`, default ON):
-
-```bash
-cmake -B build -DWORDLIST_SORT_BUILD_TESTS=ON
-cmake --build build -j
-ctest --test-dir build --output-on-failure -LE integration
-```
-
-CUDA build adds `sort_dedup_cuda_test` (label `cuda`). Convenience wrappers:
-
-```bash
-./build_and_test.sh
-./build_and_test_cuda.sh
-```
-
+Contributions via fork, branch, and Pull Request. Keep the README in sync when user-facing or functional behavior changes (CLI flags, build options, defaults).
