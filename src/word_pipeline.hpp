@@ -72,6 +72,9 @@ struct Options
     int limit = 0;
     int every_n = 0;
     int sample_n = 0;
+    /// 1-based field cut; 0 = off.
+    int field = 0;
+    std::string delimiter = "	";
     std::string tmp_dir;
     std::string prefix;
     std::string suffix;

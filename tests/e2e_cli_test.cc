@@ -638,3 +638,23 @@ TEST(E2eCli, EmailSplit)
     EXPECT_EQ(result.exit_code, 0) << result.stderr_text;
     EXPECT_EQ(test_helpers::read_text_file(output), "example.com\nplain\nuser\n");
 }
+
+TEST(E2eCli, FieldCut)
+{
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path input = work / "in.txt";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(input, "a\tb\tc\nx,y,z\nonly\n");
+
+    const auto tab = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                               " -q --field 2 --sort " + shell_quote(output.string()) +
+                                               " " + shell_quote(input.string()));
+    EXPECT_EQ(tab.exit_code, 0) << tab.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(output), "b\n");
+
+    const auto csv = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                               " -q --force --field 3 --delimiter , --sort " +
+                                               shell_quote(output.string()) + " " + shell_quote(input.string()));
+    EXPECT_EQ(csv.exit_code, 0) << csv.stderr_text;
+    EXPECT_EQ(test_helpers::read_text_file(output), "z\n");
+}
