@@ -384,12 +384,35 @@ int main(const int argc, char *argv[])
         std::println("Applied membership filter during ingest → {} words remain.", remain);
     }
 
+    std::size_t external_streamed = 0;
     if (!stream_text)
     {
-        if (external_ingest)
+        if (external_ingest && *format == ExportFormat::Text)
+        {
+            std::ofstream out_file(args.output_path, std::ios::binary | std::ios::trunc);
+            if (!out_file)
+            {
+                std::println(stderr, "Error: Failed to open output file for writing: {}", args.output_path.string());
+                return 1;
+            }
+            external_streamed = external_builder->finish_to_stream(out_file);
+            args.options.external_sort = nullptr;
+            out_file.flush();
+            if (!out_file)
+            {
+                std::println(stderr, "Error: Failed while writing external-sort output: {}", args.output_path.string());
+                return 1;
+            }
+        }
+        else if (external_ingest)
         {
             external_builder->finish(words);
             args.options.external_sort = nullptr;
+            if (const auto write_result = write_export(words, args.output_path, *format); !write_result)
+            {
+                std::println(stderr, "Error: {}", write_result.error());
+                return 1;
+            }
         }
         else
         {
@@ -402,12 +425,12 @@ int main(const int argc, char *argv[])
                                                    .cuda_threshold = static_cast<std::size_t>(args.options.cuda_threshold),
                                                    .sort_chunk = static_cast<std::size_t>(args.options.sort_chunk),
                                                });
-        }
 
-        if (const auto write_result = write_export(words, args.output_path, *format); !write_result)
-        {
-            std::println(stderr, "Error: {}", write_result.error());
-            return 1;
+            if (const auto write_result = write_export(words, args.output_path, *format); !write_result)
+            {
+                std::println(stderr, "Error: {}", write_result.error());
+                return 1;
+            }
         }
     }
     else
@@ -422,7 +445,9 @@ int main(const int argc, char *argv[])
 
     const auto end_time = std::chrono::high_resolution_clock::now();
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-    const std::size_t out_count = stream_text ? streamed_words.load() : words.size();
+    const std::size_t out_count = stream_text ? streamed_words.load()
+                                : (external_ingest && *format == ExportFormat::Text) ? external_streamed
+                                                                                      : words.size();
     std::println("Processed {} words from input files, resulting in {} words in the output list, in {} ms.",
                  total_words_processed.load(), out_count, duration.count());
 
