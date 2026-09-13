@@ -64,6 +64,7 @@ Integer options accept `--opt value` or `--opt=value` (values must be non-negati
 | `--cuda-threshold <int>` | Minimum word count before GPU sort/dedup (default: 10000000; `0` = auto ≈100k; requires `--cuda`) |
 | `--jobs <int>` | Parallel input workers: omit = auto (`hardware_concurrency`), `0` = unlimited, `>0` = cap |
 | `--sort-chunk <int>` | External CPU sort/dedup: max words per temp run (`0` = off; spills when the list is larger) |
+| `--limit <int>` | Stop ingest after N accepted survivors (`0` = unlimited; applies before sort/dedup) |
 | `--tmp-dir <path>` | Directory for external-sort / filter temp files (default: system temp; created if missing) |
 | `--format <str>` | Output format: `text` (default), `cdb`, `fst` (WLTRIE1), `pthash` (WLPTH1) |
 | `-o`, `--output <file>` | Output path or `-` for stdout (alternative to positional `<output>`; then all positionals are inputs) |

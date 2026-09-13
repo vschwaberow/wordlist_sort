@@ -49,6 +49,8 @@ struct Options
     /// Parallel input workers: -1 = auto (default; omit --jobs), 0 = unlimited, >0 = cap.
     int jobs = -1;
     int sort_chunk = 0;
+    /// Cap accepted survivors during ingest (0 = unlimited).
+    int limit = 0;
     std::string tmp_dir;
     std::string format = "text";
     std::string exclude_path;
@@ -61,6 +63,8 @@ struct Options
     std::ostream *stream_out = nullptr;
     std::mutex *stream_mutex = nullptr;
     std::atomic<std::size_t> *stream_emitted = nullptr;
+    /// Counts accepted survivors; used with --limit and optional stream accounting.
+    std::atomic<std::size_t> *survivor_count = nullptr;
     ExternalSortBuilder *external_sort = nullptr;
 };
 

@@ -96,6 +96,7 @@ constexpr std::array int_opt_specs{
     IntOptSpec{"--cuda-threshold", &Options::cuda_threshold, "Min words for GPU sort/dedup (0=auto heuristic ~100k; requires --cuda)"},
     IntOptSpec{"--jobs", &Options::jobs, "Parallel input workers (omit=auto CPU count, 0=unlimited, >0=cap)"},
     IntOptSpec{"--sort-chunk", &Options::sort_chunk, "External CPU sort/dedup: words per temp run (0=off; spills when larger)"},
+    IntOptSpec{"--limit", &Options::limit, "Stop ingest after N accepted survivors (0=unlimited)"},
 };
 
 constexpr std::array str_opt_specs{
@@ -399,7 +400,9 @@ int main(const int argc, char *argv[])
     const auto start_time = std::chrono::high_resolution_clock::now();
     std::atomic<std::size_t> total_words_processed{0};
     std::atomic<std::size_t> streamed_words{0};
+    std::atomic<std::size_t> survivors{0};
     std::vector<std::string> words;
+    args.options.survivor_count = &survivors;
     std::mutex stream_mutex;
     std::ofstream stream_file;
     std::optional<ExternalSortBuilder> external_builder;
@@ -421,7 +424,7 @@ int main(const int argc, char *argv[])
             args.options.stream_out = &stream_file;
         }
         args.options.stream_mutex = &stream_mutex;
-        args.options.stream_emitted = &streamed_words;
+        args.options.stream_emitted = &survivors;
         if (!args.options.quiet)
             std::println("Streaming text output (no in-memory word buffer).");
     }
@@ -486,7 +489,7 @@ int main(const int argc, char *argv[])
 
     if (use_membership)
     {
-        const std::size_t remain = stream_text ? streamed_words.load()
+        const std::size_t remain = stream_text ? survivors.load()
                                  : external_ingest ? external_builder->pushed()
                                                    : words.size();
         if (!args.options.quiet)
@@ -582,7 +585,7 @@ int main(const int argc, char *argv[])
 
     const auto end_time = std::chrono::high_resolution_clock::now();
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-    const std::size_t out_count = stream_text ? streamed_words.load()
+    const std::size_t out_count = stream_text ? survivors.load()
                                 : (external_ingest && *format == ExportFormat::Text) ? external_streamed
                                                                                       : words.size();
     if (!args.options.quiet)
