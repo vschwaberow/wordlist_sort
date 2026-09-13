@@ -195,14 +195,38 @@ void trim_special_inplace(std::string &str) noexcept
     return buffer;
 }
 
-[[nodiscard]] std::expected<void, std::string> write_lines(const std::vector<std::string> &words,
-                                                           const fs::path &path, const bool append)
+[[nodiscard]] bool read_record(std::istream &in, std::string &out, const bool null_separated)
 {
+    if (!null_separated)
+    {
+        if (!std::getline(in, out))
+            return false;
+        if (!out.empty() && out.back() == '\r')
+            out.pop_back();
+        return true;
+    }
+
+    out.clear();
+    char ch = '\0';
+    while (in.get(ch))
+    {
+        if (ch == '\0')
+            return true;
+        out.push_back(ch);
+    }
+    return !out.empty();
+}
+
+[[nodiscard]] std::expected<void, std::string> write_lines(const std::vector<std::string> &words,
+                                                           const fs::path &path, const bool append,
+                                                           const bool null_separated)
+{
+    const char sep = null_separated ? '\0' : '\n';
     if (is_stdio_path(path))
     {
         for (const auto &word : words)
         {
-            std::cout << word << '\n';
+            std::cout << word << sep;
             if (!std::cout)
                 return std::unexpected("Failed to write to stdout");
         }
@@ -216,7 +240,7 @@ void trim_special_inplace(std::string &str) noexcept
 
     for (const auto &word : words)
     {
-        out << word << '\n';
+        out << word << sep;
         if (!out)
             return std::unexpected(std::format("Failed to write to output file: {}", path.string()));
     }
@@ -301,14 +325,15 @@ void trim_special_inplace(std::string &str) noexcept
 
         if (options.stream_out != nullptr)
         {
+            const char sep = options.null_separated ? '\0' : '\n';
             if (options.stream_mutex != nullptr)
             {
                 std::lock_guard<std::mutex> lock(*options.stream_mutex);
-                *options.stream_out << *processed << '\n';
+                *options.stream_out << *processed << sep;
             }
             else
             {
-                *options.stream_out << *processed << '\n';
+                *options.stream_out << *processed << sep;
             }
             // stream_emitted aliases survivor_count when both are set; avoid double-count.
             if (options.stream_emitted != nullptr && options.stream_emitted != options.survivor_count)
@@ -324,13 +349,10 @@ void trim_special_inplace(std::string &str) noexcept
     };
 
     std::string line_str;
-    while (std::getline(*in, line_str))
+    while (read_record(*in, line_str, options.null_separated))
     {
         if (limit_reached())
             break;
-
-        if (!line_str.empty() && line_str.back() == '\r')
-            line_str.pop_back();
 
         if (options.skip_comments)
         {

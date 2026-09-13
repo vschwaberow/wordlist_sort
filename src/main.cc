@@ -90,6 +90,8 @@ constexpr std::array flag_specs{
     FlagSpec{"-f",             &Options::force,        "Short form of --force"},
     FlagSpec{"--skip-comments", &Options::skip_comments, "Ignore lines whose first non-space char is #"},
     FlagSpec{"--append",       &Options::append,        "Append text output to an existing file (implies no truncate)"},
+    FlagSpec{"--null",         &Options::null_separated, "Use NUL (\\0) as record separator for text I/O"},
+    FlagSpec{"-0",             &Options::null_separated, "Short form of --null"},
 };
 
 constexpr std::array int_opt_specs{
@@ -391,6 +393,11 @@ int main(const int argc, char *argv[])
         std::println(stderr, "Error: --append is only supported with --format=text");
         return 1;
     }
+    if (args.options.null_separated && *format != ExportFormat::Text)
+    {
+        std::println(stderr, "Error: --null is only supported with --format=text");
+        return 1;
+    }
 
     const std::size_t stdin_inputs = static_cast<std::size_t>(std::count_if(
         args.input_paths.begin(), args.input_paths.end(),
@@ -533,7 +540,7 @@ int main(const int argc, char *argv[])
         {
             if (is_stdio_path(args.output_path))
             {
-                external_streamed = external_builder->finish_to_stream(std::cout);
+                external_streamed = external_builder->finish_to_stream(std::cout, args.options.null_separated ? '\0' : '\n');
                 args.options.external_sort = nullptr;
                 std::cout.flush();
                 if (!std::cout)
@@ -552,7 +559,7 @@ int main(const int argc, char *argv[])
                     std::println(stderr, "Error: Failed to open output file for writing: {}", args.output_path.string());
                     return 1;
                 }
-                external_streamed = external_builder->finish_to_stream(out_file);
+                external_streamed = external_builder->finish_to_stream(out_file, args.options.null_separated ? '\0' : '\n');
                 args.options.external_sort = nullptr;
                 out_file.flush();
                 if (!out_file)
@@ -566,7 +573,7 @@ int main(const int argc, char *argv[])
         {
             external_builder->finish(words);
             args.options.external_sort = nullptr;
-            if (const auto write_result = write_export(words, args.output_path, *format, args.options.append); !write_result)
+            if (const auto write_result = write_export(words, args.output_path, *format, args.options.append, args.options.null_separated); !write_result)
             {
                 std::println(stderr, "Error: {}", write_result.error());
                 return 1;
@@ -586,7 +593,7 @@ int main(const int argc, char *argv[])
                                                    .tmp_dir = tmp_dir_path,
                                                });
 
-            if (const auto write_result = write_export(words, args.output_path, *format, args.options.append); !write_result)
+            if (const auto write_result = write_export(words, args.output_path, *format, args.options.append, args.options.null_separated); !write_result)
             {
                 std::println(stderr, "Error: {}", write_result.error());
                 return 1;

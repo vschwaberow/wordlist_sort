@@ -31,7 +31,8 @@ enum class ExportFormat
 [[nodiscard]] std::expected<void, std::string> write_export(const std::vector<std::string> &words,
                                                             const std::filesystem::path &path,
                                                             ExportFormat format,
-                                                            bool append = false);
+                                                            bool append = false,
+                                                            bool null_separated = false);
 
 [[nodiscard]] std::expected<void, std::string> write_cdb(const std::vector<std::string> &words,
                                                          const std::filesystem::path &path);

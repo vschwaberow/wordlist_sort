@@ -48,6 +48,7 @@ struct Options
     bool force = false;
     bool skip_comments = false;
     bool append = false;
+    bool null_separated = false;
     int cuda_threshold = 10'000'000;
     /// Parallel input workers: -1 = auto (default; omit --jobs), 0 = unlimited, >0 = cap.
     int jobs = -1;
@@ -96,7 +97,8 @@ void trim_special_inplace(std::string &str) noexcept;
 [[nodiscard]] std::expected<std::vector<char>, std::string> read_file(const std::filesystem::path &path);
 [[nodiscard]] std::expected<void, std::string> write_lines(const std::vector<std::string> &words,
                                                            const std::filesystem::path &path,
-                                                           bool append = false);
+                                                           bool append = false,
+                                                           bool null_separated = false);
 
 [[nodiscard]] bool process_file(const std::filesystem::path &path,
                                 std::vector<std::string> &output_words,
