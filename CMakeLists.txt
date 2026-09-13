@@ -49,6 +49,7 @@ option(WORDLIST_SORT_PTHASH "Enable PTHash membership engine for --exclude/--int
 option(WORDLIST_SORT_ZLIB "Enable transparent gzip (.gz) input via zlib" ON)
 option(WORDLIST_SORT_ZSTD "Enable transparent zstd (.zst) input via libzstd" ON)
 option(WORDLIST_SORT_LZMA "Enable transparent xz (.xz) input via liblzma" ON)
+option(WORDLIST_SORT_LZ4 "Enable transparent lz4 (.lz4) input via liblz4" ON)
 
 set(WORDLIST_SORT_CORE_SOURCES
     src/word_pipeline.cc
@@ -91,6 +92,14 @@ if(WORDLIST_SORT_LZMA)
     find_package(LibLZMA REQUIRED)
     target_link_libraries(wordlist_sort PRIVATE LibLZMA::LibLZMA)
     target_compile_definitions(wordlist_sort PRIVATE WORDLIST_SORT_LZMA=1)
+endif()
+
+if(WORDLIST_SORT_LZ4)
+    find_path(WORDLIST_SORT_LZ4_INCLUDE lz4frame.h REQUIRED)
+    find_library(WORDLIST_SORT_LZ4_LIB lz4 REQUIRED)
+    target_include_directories(wordlist_sort PRIVATE ${WORDLIST_SORT_LZ4_INCLUDE})
+    target_link_libraries(wordlist_sort PRIVATE ${WORDLIST_SORT_LZ4_LIB})
+    target_compile_definitions(wordlist_sort PRIVATE WORDLIST_SORT_LZ4=1)
 endif()
 
 if(WORDLIST_SORT_PTHASH)
