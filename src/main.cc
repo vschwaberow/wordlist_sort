@@ -294,6 +294,9 @@ using ParseResult = std::expected<std::optional<ParsedArgs>, std::string>;
 
 int main(const int argc, char *argv[])
 {
+    std::ios::sync_with_stdio(false);
+    std::cin.tie(nullptr);
+
     auto parse_result = parse_args(argc, argv);
     if (!parse_result)
     {

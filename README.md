@@ -171,7 +171,7 @@ CUDA example (CUDA build required):
 ## Performance
 
 - **Parallel:** each input file processed in its own `std::async` task
-- **Line I/O:** inputs are streamed with `getline` (no `mmap`; no full-file `vector<char>` on the ingest path)
+- **Line I/O:** ~1 MiB buffered record scans (`memchr`) and batched writes (no `mmap`; no full-file `vector<char>` on the ingest path)
 - **Dedup:** `--deduplicate` uses `std::ranges::sort` + `std::unique` + erase (not `unordered_set`)
 - **Ranges:** lazy transforms via `std::ranges`
 - **Move semantics:** per-task results moved into output without copying

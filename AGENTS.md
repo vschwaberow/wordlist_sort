@@ -70,7 +70,7 @@ These match the current code and README (keep them aligned):
 
 1. **Binary name is `wordlist_sort`.** `add_executable(wordlist_sort …)` and `PROJECT_NAME` / the version banner all use the same name. Output path: `build/wordlist_sort`.
 2. **Language standard is C++26.** `CMAKE_CXX_STANDARD 26` with `STANDARD_REQUIRED ON`; `cmake_minimum_required(VERSION 3.18)`.
-3. **I/O streams lines via `getline`.** There is no `mmap` path; peak RAM is survivors (+ optional B membership filter), not the full input file.
+3. **I/O uses large user-space buffers (~1 MiB) + `memchr` record scans** (`BufferedRecordReader` / `BufferedRecordWriter` in `src/io_buffer.hpp`). There is no `mmap` path; peak RAM is survivors (+ optional B membership filter + I/O slabs), not the full input file.
 4. **Dedup is sort + unique.** `--deduplicate` runs `std::ranges::sort` then `std::unique` + erase. No `unordered_set` / `unordered_map` for deduplication.
 5. **Release optimization is portable by default.** GCC/Clang get `-O3` (MSVC `/O2`) only for `CMAKE_BUILD_TYPE=Release`. `-march=native` is **opt-in** via `-DWORDLIST_SORT_NATIVE_ARCH=ON` (GCC/Clang only; non-portable).
 
@@ -124,7 +124,7 @@ These are behaviors not clearly documented and easy to get wrong:
 
 ## Architecture & Data Flow
 
-1. **`process_file`** — streams each input line via `std::getline` (no full-file buffer); optional membership gate drops during ingest; optional text stream sink writes survivors immediately.
+1. **`process_file`** — streams each input record via `BufferedRecordReader` (no full-file buffer); optional membership gate drops during ingest; optional text stream sink batches survivors under a shared mutex.
 2. **`process_word`** — transform/filter pipeline (`strip_html_tags`, trims, dup-sense, email-sort, min/max len).
 3. **`process_multiple_files_parallel`** — one `std::async` task per input file.
 4. **`--exclude`/`--intersect`** — build membership from B before reading A (`membership_filter.*`).
