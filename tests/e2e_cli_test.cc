@@ -223,3 +223,25 @@ TEST(E2eCli, MissingInputExitsNonZero)
     EXPECT_NE(result.exit_code, 0);
 }
 
+TEST(E2eCli, GzipInput)
+{
+#if !defined(WORDLIST_SORT_ZLIB)
+    GTEST_SKIP() << "built without zlib";
+#else
+    const auto work = test_helpers::make_temp_dir();
+    const fs::path plain = work / "in.txt";
+    const fs::path gz = work / "in.txt.gz";
+    const fs::path output = work / "out.txt";
+    test_helpers::write_text_file(plain, "b\na\nb\n");
+
+    const int z = std::system(("gzip -c " + shell_quote(plain.string()) + " > " + shell_quote(gz.string())).c_str());
+    ASSERT_EQ(z, 0);
+
+    const auto result = test_helpers::run_command(shell_quote(wordlist_sort_exe()) +
+                                                " -q --sort --deduplicate " + shell_quote(output.string()) +
+                                                " " + shell_quote(gz.string()));
+    EXPECT_EQ(result.exit_code, 0);
+    EXPECT_EQ(test_helpers::read_text_file(output), "a\nb\n");
+#endif
+}
+

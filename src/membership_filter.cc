@@ -5,6 +5,7 @@
 // Copyright (c) 2026 Volker Schwaberow
 
 #include "membership_filter.hpp"
+#include "gzip_stream.hpp"
 
 #include "export_format.hpp"
 
@@ -179,13 +180,14 @@ private:
 [[nodiscard]] std::expected<std::vector<std::string>, std::string>
 load_filter_keys(const std::filesystem::path &path)
 {
-    std::ifstream in(path);
+    std::string open_error;
+    auto in = open_input_stream(path, &open_error);
     if (!in)
-        return std::unexpected(std::format("Failed to open filter file: {}", path.string()));
+        return std::unexpected(std::format("Failed to open filter file: {}", open_error));
 
     std::vector<std::string> keys;
     std::string line;
-    while (std::getline(in, line))
+    while (std::getline(*in, line))
     {
         while (!line.empty() && (line.back() == '\r' || line.back() == '\n'))
             line.pop_back();
