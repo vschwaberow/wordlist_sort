@@ -87,6 +87,7 @@ constexpr std::array flag_specs{
     FlagSpec{"--quiet",        &Options::quiet,        "Suppress informational stdout (errors/warnings still print)"},
     FlagSpec{"-q",             &Options::quiet,        "Short form of --quiet"},
     FlagSpec{"--progress",     &Options::progress,     "Print ingest progress to stderr (words/sec)"},
+    FlagSpec{"--stats",        &Options::stats,        "Print final ingest/output counts and duration to stderr"},
     FlagSpec{"--force",        &Options::force,        "Overwrite existing output file"},
     FlagSpec{"-f",             &Options::force,        "Short form of --force"},
     FlagSpec{"--skip-comments", &Options::skip_comments, "Ignore lines whose first non-space char is #"},
@@ -658,6 +659,10 @@ int main(const int argc, char *argv[])
                                                                                       : words.size();
     if (!args.options.quiet)
         std::println("Processed {} words from input files, resulting in {} words in the output list, in {} ms.",
+                     total_words_processed.load(), out_count, duration.count());
+
+    if (args.options.stats)
+        std::println(stderr, "stats: ingest={} output={} duration_ms={}",
                      total_words_processed.load(), out_count, duration.count());
 
     return 0;
